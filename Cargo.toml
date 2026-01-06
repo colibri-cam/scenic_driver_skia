@@ -1,0 +1,14 @@
+[package]
+name = "scenic_driver_skia"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+winit = "0.30"
+glutin = "0.32"
+glutin-winit = "0.5"
+raw-window-handle = "0.6"
+gl = "0.14"
+
+# Skia on Wayland via EGL:
+skia-safe = { version = "0.91.1", features = ["wayland", "embed-freetype"] }
