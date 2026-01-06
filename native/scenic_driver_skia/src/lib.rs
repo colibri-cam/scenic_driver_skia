@@ -22,4 +22,4 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-rustler::init!("Elixir.ScenicDriverSkia.Native", [start]);
+rustler::init!("Elixir.ScenicDriverSkia.Native");

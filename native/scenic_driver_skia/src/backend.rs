@@ -14,7 +14,8 @@ use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::WindowEvent,
-    event_loop::EventLoop,
+    event_loop::EventLoopBuilder,
+    platform::{wayland::EventLoopBuilderExtWayland, x11::EventLoopBuilderExtX11},
     window::{Window, WindowAttributes},
 };
 
@@ -73,7 +74,10 @@ impl ApplicationHandler for App {
 }
 
 pub fn run() {
-    let el = EventLoop::new().expect("Failed to create event loop");
+    let el = EventLoopBuilder::new()
+        .with_any_thread(true)
+        .build()
+        .expect("Failed to create event loop");
     let window_attributes = WindowAttributes::default()
         .with_title("skia-wayland-hello")
         .with_inner_size(LogicalSize::new(800, 600));
