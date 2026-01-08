@@ -1,7 +1,7 @@
 # Scenic Driver Skia Plan
 
 ## Goal
-Implement the shortest path to display a Scenic rectangle on screen using a Rust/Skia renderer via Rustler.
+Implement the shortest path to display a Scenic rectangle on screen using a Rust/Skia renderer via Rustler, with a container-friendly raster backend for validation.
 
 ## Incremental Steps
 1. **Script ingestion (Elixir)**
@@ -29,6 +29,7 @@ Implement the shortest path to display a Scenic rectangle on screen using a Rust
    - Add scale/rotate/transform op support.
    - Add stroke support (width + color).
    - Expand script op coverage for text/image to unblock basic UI.
+   - Replace deprecated Skia image encode API in the raster backend.
 
 ## Done So Far
 - Driver module ingests scripts and forwards them to the Rust NIF.

@@ -7,6 +7,7 @@ This repository contains a Rust project with an Elixir wrapper. Please follow th
 - Run `mix format` and `mix test` to validate Elixir changes.
 - Add or update tests with each incremental step and keep them passing.
 - Document test commands you run in your final summary, noting any failures or external blockers.
+- Source `~/.bashrc` to activate `mise` before running `mix` tasks if needed.
 - Prefer small, focused modules. Keep rendering logic backend-agnostic and isolate backend/windowing concerns in their own modules.
 - Avoid adding unnecessary dependencies; prefer the standard library where practical.
 
