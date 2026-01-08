@@ -19,6 +19,22 @@ defmodule ScenicDriverSkia do
     |> normalize_start_result()
   end
 
+  @doc """
+  Stop the renderer if it is running.
+  """
+  @spec stop() :: :ok | {:error, term()}
+  def stop do
+    Native.stop()
+  end
+
+  @doc """
+  Update the text rendered by the driver.
+  """
+  @spec set_text(String.t()) :: :ok | {:error, term()}
+  def set_text(text) when is_binary(text) do
+    Native.set_text(text)
+  end
+
   defp normalize_start_result(:ok), do: :ok
   defp normalize_start_result({:ok, _}), do: :ok
   defp normalize_start_result({:error, _} = error), do: error

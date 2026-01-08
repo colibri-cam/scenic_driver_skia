@@ -3,4 +3,10 @@ defmodule ScenicDriverSkia.Native do
 
   @doc false
   def start(_backend), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def stop, do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def set_text(_text), do: :erlang.nif_error(:nif_not_loaded)
 end
