@@ -1,1 +1,10 @@
-/target
+/_build
+/deps
+/.elixir_ls
+/cover
+/node_modules
+*.beam
+**/*.ez
+
+# Rust build artifacts
+/native/scenic_driver_skia/target

@@ -38,6 +38,7 @@ pub struct Renderer {
     surface: Surface,
     gr_context: Option<skia_safe::gpu::DirectContext>,
     source: SurfaceSource,
+    text: String,
 }
 
 impl Renderer {
@@ -47,6 +48,7 @@ impl Renderer {
         gr_context: skia_safe::gpu::DirectContext,
         num_samples: usize,
         stencil_size: usize,
+        text: String,
     ) -> Self {
         let mut gr_context = gr_context;
         let surface = create_skia_surface(
@@ -65,18 +67,25 @@ impl Renderer {
                 num_samples,
                 stencil_size,
             },
+            text,
         }
     }
 
     pub fn from_surface(
         surface: Surface,
         gr_context: Option<skia_safe::gpu::DirectContext>,
+        text: String,
     ) -> Self {
         Self {
             surface,
             gr_context,
             source: SurfaceSource::Raster,
+            text,
         }
+    }
+
+    pub fn set_text(&mut self, text: String) {
+        self.text = text;
     }
 
     pub fn redraw(&mut self) {
@@ -99,7 +108,7 @@ impl Renderer {
             .expect("No system fonts found");
 
         let font = Font::new(tf, 48.0);
-        canvas.draw_str("Hello, Wayland", (40, 120), &font, &paint);
+        canvas.draw_str(&self.text, (40, 120), &font, &paint);
 
         if let Some(gr) = self.gr_context.as_mut() {
             gr.flush_and_submit();

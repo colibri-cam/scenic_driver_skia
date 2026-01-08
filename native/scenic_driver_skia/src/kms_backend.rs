@@ -1,5 +1,9 @@
 use std::fs::{File, OpenOptions};
 use std::os::fd::{AsFd, BorrowedFd};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use drm::Device as BasicDevice;
@@ -67,7 +71,7 @@ fn first_connected_connector(
     Err("no connected DRM connectors found".into())
 }
 
-pub fn run() {
+pub fn run(stop: Arc<AtomicBool>, text: Arc<Mutex<String>>, dirty: Arc<AtomicBool>) {
     let card = match open_card() {
         Ok(card) => card,
         Err(e) => {
@@ -135,10 +139,19 @@ pub fn run() {
         .map(|borrowed| unsafe { borrowed.release() })
         .expect("Failed to create raster surface for KMS");
 
-    let mut renderer = Renderer::from_surface(surface, None);
+    let initial_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let mut renderer = Renderer::from_surface(surface, None, initial_text);
     renderer.redraw();
 
     loop {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        if dirty.swap(false, Ordering::Relaxed) {
+            let updated = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            renderer.set_text(updated);
+            renderer.redraw();
+        }
         std::thread::sleep(Duration::from_millis(500));
     }
 }

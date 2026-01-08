@@ -3,7 +3,12 @@ name = "scenic_driver_skia"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "scenic_driver_skia"
+crate-type = ["cdylib"]
+
 [dependencies]
+rustler = "0.37"
 winit = "0.30"
 glutin = "0.32"
 glutin-winit = "0.5"
