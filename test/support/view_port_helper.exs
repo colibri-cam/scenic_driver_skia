@@ -13,7 +13,7 @@ defmodule ScenicDriverSkia.TestSupport.ViewPort do
     ensure_viewport_supervisor()
 
     scene = Keyword.get(opts, :scene, DefaultScene)
-    drivers = Keyword.get(opts, :drivers, [[module: Scenic.Driver.Skia, name: :skia_driver]])
+    drivers = Keyword.get(opts, :drivers, [[module: ScenicDriverSkia.Driver, name: :skia_driver]])
     size = Keyword.get(opts, :size, {200, 120})
 
     {:ok, %ViewPort{} = vp} =

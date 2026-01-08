@@ -28,7 +28,7 @@ defmodule ScenicDriverSkia.DriverLoggingTest do
 
     assert_receive {:viewport, vp}
 
-    assert log_start =~ "Scenic.Driver.Skia init"
+    assert log_start =~ "ScenicDriverSkia.Driver init"
     assert log_start =~ "request_input"
     assert log_start =~ "clear_color"
 

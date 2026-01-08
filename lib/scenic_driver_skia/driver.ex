@@ -1,4 +1,4 @@
-defmodule Scenic.Driver.Skia do
+defmodule ScenicDriverSkia.Driver do
   @moduledoc """
   Minimal Scenic driver that logs viewport callbacks.
 
@@ -6,7 +6,7 @@ defmodule Scenic.Driver.Skia do
 
       drivers: [
         [
-          module: Scenic.Driver.Skia,
+        module: ScenicDriverSkia.Driver,
           name: :skia_driver
         ]
       ]
@@ -35,37 +35,37 @@ defmodule Scenic.Driver.Skia do
 
   @impl Scenic.Driver
   def init(driver, opts) do
-    Logger.info("Scenic.Driver.Skia init: #{inspect(opts)}")
+    Logger.info("ScenicDriverSkia.Driver init: #{inspect(opts)}")
     {:ok, assign(driver, :opts, opts)}
   end
 
   @impl Scenic.Driver
   def reset_scene(driver) do
-    Logger.debug("Scenic.Driver.Skia reset_scene")
+    Logger.debug("ScenicDriverSkia.Driver reset_scene")
     {:ok, driver}
   end
 
   @impl Scenic.Driver
   def request_input(input, driver) do
-    Logger.debug("Scenic.Driver.Skia request_input: #{inspect(input)}")
+    Logger.debug("ScenicDriverSkia.Driver request_input: #{inspect(input)}")
     {:ok, driver}
   end
 
   @impl Scenic.Driver
   def update_scene(script_ids, driver) do
-    Logger.debug("Scenic.Driver.Skia update_scene: #{inspect(script_ids)}")
+    Logger.debug("ScenicDriverSkia.Driver update_scene: #{inspect(script_ids)}")
     {:ok, driver}
   end
 
   @impl Scenic.Driver
   def del_scripts(script_ids, driver) do
-    Logger.debug("Scenic.Driver.Skia del_scripts: #{inspect(script_ids)}")
+    Logger.debug("ScenicDriverSkia.Driver del_scripts: #{inspect(script_ids)}")
     {:ok, driver}
   end
 
   @impl Scenic.Driver
   def clear_color(color, driver) do
-    Logger.debug("Scenic.Driver.Skia clear_color: #{inspect(color)}")
+    Logger.debug("ScenicDriverSkia.Driver clear_color: #{inspect(color)}")
     {:ok, driver}
   end
 
