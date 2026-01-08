@@ -5,6 +5,7 @@
 /node_modules
 *.beam
 **/*.ez
+/priv/native
 
 # Rust build artifacts
 /native/scenic_driver_skia/target

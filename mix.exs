@@ -21,7 +21,8 @@ defmodule ScenicDriverSkia.MixProject do
 
   defp deps do
     [
-      {:rustler, "~> 0.37"}
+      {:rustler, "~> 0.37"},
+      {:scenic, path: "../scenic"}
     ]
   end
 
