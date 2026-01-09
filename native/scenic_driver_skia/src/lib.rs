@@ -402,6 +402,66 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 )));
                 rest = tail;
             }
+            0x50 => {
+                if rest.len() < 26 {
+                    return Err("transform opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (a_bytes, tail) = tail.split_at(4);
+                let (b_bytes, tail) = tail.split_at(4);
+                let (c_bytes, tail) = tail.split_at(4);
+                let (d_bytes, tail) = tail.split_at(4);
+                let (e_bytes, tail) = tail.split_at(4);
+                let (f_bytes, tail) = tail.split_at(4);
+                let a = f32::from_bits(u32::from_be_bytes([
+                    a_bytes[0], a_bytes[1], a_bytes[2], a_bytes[3],
+                ]));
+                let b = f32::from_bits(u32::from_be_bytes([
+                    b_bytes[0], b_bytes[1], b_bytes[2], b_bytes[3],
+                ]));
+                let c = f32::from_bits(u32::from_be_bytes([
+                    c_bytes[0], c_bytes[1], c_bytes[2], c_bytes[3],
+                ]));
+                let d = f32::from_bits(u32::from_be_bytes([
+                    d_bytes[0], d_bytes[1], d_bytes[2], d_bytes[3],
+                ]));
+                let e = f32::from_bits(u32::from_be_bytes([
+                    e_bytes[0], e_bytes[1], e_bytes[2], e_bytes[3],
+                ]));
+                let f = f32::from_bits(u32::from_be_bytes([
+                    f_bytes[0], f_bytes[1], f_bytes[2], f_bytes[3],
+                ]));
+                ops.push(ScriptOp::Transform { a, b, c, d, e, f });
+                rest = tail;
+            }
+            0x51 => {
+                if rest.len() < 10 {
+                    return Err("scale opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (x_bytes, tail) = tail.split_at(4);
+                let (y_bytes, tail) = tail.split_at(4);
+                let x = f32::from_bits(u32::from_be_bytes([
+                    x_bytes[0], x_bytes[1], x_bytes[2], x_bytes[3],
+                ]));
+                let y = f32::from_bits(u32::from_be_bytes([
+                    y_bytes[0], y_bytes[1], y_bytes[2], y_bytes[3],
+                ]));
+                ops.push(ScriptOp::Scale(x, y));
+                rest = tail;
+            }
+            0x52 => {
+                if rest.len() < 6 {
+                    return Err("rotate opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (r_bytes, tail) = tail.split_at(4);
+                let radians = f32::from_bits(u32::from_be_bytes([
+                    r_bytes[0], r_bytes[1], r_bytes[2], r_bytes[3],
+                ]));
+                ops.push(ScriptOp::Rotate(radians));
+                rest = tail;
+            }
             0x53 => {
                 if rest.len() < 10 {
                     return Err("translate opcode truncated".to_string());

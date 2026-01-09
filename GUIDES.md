@@ -29,16 +29,16 @@ The primary goals are:
 - `native/scenic_driver_skia/src/renderer.rs`
   - Replays `ScriptOp` lists during `redraw`.
   - Resolves `DrawScript` recursively and prevents cycles.
-  - Maintains a small draw state (translate + fill color) with push/pop.
-  - Handles `DrawText` using the current fill color and translation.
+  - Maintains draw state (fill/stroke/text) plus a canvas transform stack.
+  - Handles `DrawText` with font, size, alignment, and baseline.
 
 ## Script Parsing
 Currently supported ops in Rust:
 - `push_state`, `pop_state`, `pop_push_state`
-- `translate`
-- `fill_color`
-- `draw_rect`
-- `draw_text`
+- `translate`, `rotate`, `scale`, `transform`
+- `fill_color`, `stroke_color`, `stroke_width`
+- `draw_rect`, `draw_line`, `draw_circle`
+- `draw_text`, `font`, `font_size`, `text_align`, `text_base`
 - `draw_script` (stored as `ScriptOp::DrawScript`)
 
 Unknown ops return an error; add support by:
@@ -49,7 +49,7 @@ Unknown ops return an error; add support by:
 The renderer does not parse per frame. It:
 - Clears the canvas using `clear_color`.
 - Looks up the `_root_` script id.
-- Replays the cached ops with a stack of `(translate, fill_color)`.
+- Replays cached ops with a draw-state stack and canvas transforms.
 - For `DrawScript`, it recursively replays the referenced script.
 
 ## Backends
@@ -63,7 +63,8 @@ The render state is cloned and sent to the backend on updates; the backend redra
 ## Assets and Fonts
 This driver uses the Scenic static assets pipeline with local sources. Fonts live in
 `assets/fonts/` and are aliased to `:roboto` and `:roboto_mono` via the assets module.
-See `ASSETS.md` for details.
+The renderer loads font binaries from `priv/__scenic/assets/<hash>` when handling
+`font` ops. See `ASSETS.md` for details.
 
 ## Extending the Architecture
 Recommended next steps:

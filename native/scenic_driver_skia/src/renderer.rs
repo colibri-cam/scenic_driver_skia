@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 use skia_safe::{
-    Color, ColorType, Font, FontMgr, FontStyle, Paint, Rect, Surface,
+    Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintStyle, Point, Rect, Surface,
+    Typeface, Vector,
     gpu::{self, SurfaceOrigin, backend_render_targets, gl::FramebufferInfo},
 };
 
@@ -11,9 +13,40 @@ pub enum ScriptOp {
     PopState,
     PopPushState,
     Translate(f32, f32),
+    Rotate(f32),
+    Scale(f32, f32),
+    Transform {
+        a: f32,
+        b: f32,
+        c: f32,
+        d: f32,
+        e: f32,
+        f: f32,
+    },
     FillColor(Color),
-    DrawRect { width: f32, height: f32, flag: u16 },
+    StrokeColor(Color),
+    StrokeWidth(f32),
+    DrawLine {
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        flag: u16,
+    },
+    DrawCircle {
+        radius: f32,
+        flag: u16,
+    },
+    DrawRect {
+        width: f32,
+        height: f32,
+        flag: u16,
+    },
     DrawText(String),
+    Font(String),
+    FontSize(f32),
+    TextAlign(TextAlign),
+    TextBase(TextBase),
     DrawScript(String),
 }
 
@@ -137,7 +170,6 @@ impl Renderer {
         let canvas = self.surface.canvas();
         canvas.clear(render_state.clear_color);
 
-        let font = default_font();
         if let Some(root_id) = render_state.root_id.clone() {
             let mut draw_state = DrawState::default();
             let mut stack_ids = Vec::new();
@@ -147,7 +179,6 @@ impl Renderer {
                 canvas,
                 &mut draw_state,
                 &mut stack_ids,
-                font.as_ref(),
             );
         }
 
@@ -155,7 +186,7 @@ impl Renderer {
             let mut paint = Paint::default();
             paint.set_anti_alias(true);
             paint.set_color(Color::BLACK);
-            if let Some(font) = font.as_ref() {
+            if let Some(font) = default_font(DrawState::DEFAULT_FONT_SIZE).as_ref() {
                 canvas.draw_str(&self.text, (40, 120), font, &paint);
             }
         }
@@ -191,7 +222,6 @@ fn draw_script(
     canvas: &skia_safe::Canvas,
     draw_state: &mut DrawState,
     stack_ids: &mut Vec<String>,
-    font: Option<&Font>,
 ) {
     if stack_ids.iter().any(|id| id == script_id) {
         return;
@@ -206,41 +236,114 @@ fn draw_script(
 
     for op in ops {
         match op {
-            ScriptOp::PushState => draw_state.push(),
-            ScriptOp::PopState => draw_state.pop(),
-            ScriptOp::PopPushState => draw_state.pop_push(),
-            ScriptOp::Translate(x, y) => draw_state.translate = (*x, *y),
+            ScriptOp::PushState => {
+                canvas.save();
+                draw_state.push();
+            }
+            ScriptOp::PopState => {
+                if draw_state.can_pop() {
+                    canvas.restore();
+                    draw_state.pop();
+                }
+            }
+            ScriptOp::PopPushState => {
+                if draw_state.can_pop() {
+                    canvas.restore();
+                    canvas.save();
+                    draw_state.pop_push();
+                }
+            }
+            ScriptOp::Translate(x, y) => {
+                canvas.translate(Vector::new(*x, *y));
+            }
+            ScriptOp::Rotate(radians) => {
+                canvas.rotate(radians.to_degrees(), None);
+            }
+            ScriptOp::Scale(x, y) => {
+                canvas.scale((*x, *y));
+            }
+            ScriptOp::Transform { a, b, c, d, e, f } => {
+                let matrix = Matrix::new_all(*a, *c, *e, *b, *d, *f, 0.0, 0.0, 1.0);
+                canvas.concat(&matrix);
+            }
             ScriptOp::FillColor(color) => draw_state.fill_color = *color,
+            ScriptOp::StrokeColor(color) => draw_state.stroke_color = *color,
+            ScriptOp::StrokeWidth(width) => draw_state.stroke_width = *width,
+            ScriptOp::DrawLine {
+                x0,
+                y0,
+                x1,
+                y1,
+                flag,
+            } => {
+                if flag & 0x02 == 0x02 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_line(Point::new(*x0, *y0), Point::new(*x1, *y1), &paint);
+                }
+            }
+            ScriptOp::DrawCircle { radius, flag } => {
+                if flag & 0x01 == 0x01 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_color(draw_state.fill_color);
+                    canvas.draw_circle(Point::new(0.0, 0.0), *radius, &paint);
+                }
+                if flag & 0x02 == 0x02 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_circle(Point::new(0.0, 0.0), *radius, &paint);
+                }
+            }
             ScriptOp::DrawRect {
                 width,
                 height,
                 flag,
             } => {
                 if flag & 0x01 == 0x01 {
-                    let rect = Rect::from_xywh(
-                        draw_state.translate.0,
-                        draw_state.translate.1,
-                        *width,
-                        *height,
-                    );
+                    let rect = Rect::from_xywh(0.0, 0.0, *width, *height);
                     let mut paint = Paint::default();
                     paint.set_anti_alias(true);
                     paint.set_color(draw_state.fill_color);
                     canvas.draw_rect(rect, &paint);
                 }
+                if flag & 0x02 == 0x02 {
+                    let rect = Rect::from_xywh(0.0, 0.0, *width, *height);
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_rect(rect, &paint);
+                }
             }
             ScriptOp::DrawText(text) => {
-                if let Some(font) = font {
+                let font = match draw_state.font_id.as_deref() {
+                    Some(font_id) => font_from_asset(font_id, draw_state.font_size),
+                    None => default_font(draw_state.font_size),
+                };
+                if let Some(font) = font.as_ref() {
                     if !text.is_empty() {
                         let mut paint = Paint::default();
                         paint.set_anti_alias(true);
                         paint.set_color(draw_state.fill_color);
-                        canvas.draw_str(text, draw_state.translate, font, &paint);
+                        let (dx, dy) = draw_state.text_offsets(text, font, &paint);
+                        canvas.draw_str(text, (dx, dy), font, &paint);
                     }
                 }
             }
+            ScriptOp::Font(font_id) => draw_state.font_id = Some(font_id.clone()),
+            ScriptOp::FontSize(size) => draw_state.font_size = *size,
+            ScriptOp::TextAlign(align) => draw_state.text_align = *align,
+            ScriptOp::TextBase(base) => draw_state.text_base = *base,
             ScriptOp::DrawScript(id) => {
-                draw_script(render_state, id, canvas, draw_state, stack_ids, font);
+                draw_script(render_state, id, canvas, draw_state, stack_ids);
             }
         }
     }
@@ -248,50 +351,166 @@ fn draw_script(
     stack_ids.pop();
 }
 
-fn default_font() -> Option<Font> {
+fn default_font(size: f32) -> Option<Font> {
     let fm = FontMgr::new();
     let tf = fm
         .match_family_style("DejaVu Sans", FontStyle::normal())
         .or_else(|| fm.match_family_style("Sans", FontStyle::normal()))?;
-    Some(Font::new(tf, 48.0))
+    Some(Font::new(tf, size))
+}
+
+fn font_from_asset(font_id: &str, size: f32) -> Option<Font> {
+    let typeface = typeface_from_asset(font_id)?;
+    Some(Font::new(typeface, size))
+}
+
+fn typeface_from_asset(font_id: &str) -> Option<Typeface> {
+    static FONT_CACHE: OnceLock<Mutex<HashMap<String, Typeface>>> = OnceLock::new();
+    let cache = FONT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(cache) = cache.lock() {
+        if let Some(typeface) = cache.get(font_id) {
+            return Some(typeface.clone());
+        }
+    }
+
+    let mut path = std::env::current_dir().ok()?;
+    path.push("priv");
+    path.push("__scenic");
+    path.push("assets");
+    path.push(font_id);
+    let bytes = std::fs::read(path).ok()?;
+    let fm = FontMgr::new();
+    let typeface = fm.new_from_data(&bytes, 0)?;
+
+    if let Ok(mut cache) = cache.lock() {
+        cache.insert(font_id.to_string(), typeface.clone());
+    }
+
+    Some(typeface)
 }
 
 #[derive(Clone)]
 struct DrawState {
-    translate: (f32, f32),
     fill_color: Color,
-    stack: Vec<((f32, f32), Color)>,
+    stroke_color: Color,
+    stroke_width: f32,
+    font_id: Option<String>,
+    font_size: f32,
+    text_align: TextAlign,
+    text_base: TextBase,
+    stack: Vec<DrawStateSnapshot>,
 }
 
 impl Default for DrawState {
     fn default() -> Self {
         Self {
-            translate: (0.0, 0.0),
-            fill_color: Color::RED,
+            fill_color: Color::BLACK,
+            stroke_color: Color::BLACK,
+            stroke_width: 1.0,
+            font_id: None,
+            font_size: Self::DEFAULT_FONT_SIZE,
+            text_align: TextAlign::Left,
+            text_base: TextBase::Alphabetic,
             stack: Vec::new(),
         }
     }
 }
 
 impl DrawState {
+    const DEFAULT_FONT_SIZE: f32 = 20.0;
+
     fn push(&mut self) {
-        self.stack.push((self.translate, self.fill_color));
+        self.stack.push(DrawStateSnapshot {
+            fill_color: self.fill_color,
+            stroke_color: self.stroke_color,
+            stroke_width: self.stroke_width,
+            font_id: self.font_id.clone(),
+            font_size: self.font_size,
+            text_align: self.text_align,
+            text_base: self.text_base,
+        });
     }
 
     fn pop(&mut self) {
-        if let Some((translate, fill_color)) = self.stack.pop() {
-            self.translate = translate;
-            self.fill_color = fill_color;
-        } else {
-            self.translate = (0.0, 0.0);
-            self.fill_color = Color::RED;
-        }
+        let snapshot = self.stack.pop().unwrap_or_default();
+        self.apply_snapshot(snapshot);
     }
 
     fn pop_push(&mut self) {
-        let current = self.stack.pop().unwrap_or(((0.0, 0.0), Color::RED));
-        self.translate = current.0;
-        self.fill_color = current.1;
-        self.stack.push(current);
+        let snapshot = self.stack.pop().unwrap_or_default();
+        self.apply_snapshot(snapshot.clone());
+        self.stack.push(snapshot);
     }
+
+    fn can_pop(&self) -> bool {
+        !self.stack.is_empty()
+    }
+
+    fn apply_snapshot(&mut self, snapshot: DrawStateSnapshot) {
+        self.fill_color = snapshot.fill_color;
+        self.stroke_color = snapshot.stroke_color;
+        self.stroke_width = snapshot.stroke_width;
+        self.font_id = snapshot.font_id;
+        self.font_size = snapshot.font_size;
+        self.text_align = snapshot.text_align;
+        self.text_base = snapshot.text_base;
+    }
+
+    fn text_offsets(&self, text: &str, font: &Font, paint: &Paint) -> (f32, f32) {
+        let (width, _bounds) = font.measure_str(text, Some(paint));
+        let metrics = font.metrics().1;
+        let dx = match self.text_align {
+            TextAlign::Left => 0.0,
+            TextAlign::Center => -width / 2.0,
+            TextAlign::Right => -width,
+        };
+        let dy = match self.text_base {
+            TextBase::Top => -metrics.ascent,
+            TextBase::Middle => -(metrics.ascent + metrics.descent) / 2.0,
+            TextBase::Alphabetic => 0.0,
+            TextBase::Bottom => -metrics.descent,
+        };
+        (dx, dy)
+    }
+}
+
+#[derive(Clone)]
+struct DrawStateSnapshot {
+    fill_color: Color,
+    stroke_color: Color,
+    stroke_width: f32,
+    font_id: Option<String>,
+    font_size: f32,
+    text_align: TextAlign,
+    text_base: TextBase,
+}
+
+impl Default for DrawStateSnapshot {
+    fn default() -> Self {
+        Self {
+            fill_color: Color::BLACK,
+            stroke_color: Color::BLACK,
+            stroke_width: 1.0,
+            font_id: None,
+            font_size: DrawState::DEFAULT_FONT_SIZE,
+            text_align: TextAlign::Left,
+            text_base: TextBase::Alphabetic,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TextAlign {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TextBase {
+    Top,
+    Middle,
+    Alphabetic,
+    Bottom,
 }
