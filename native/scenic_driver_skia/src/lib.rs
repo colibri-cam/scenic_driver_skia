@@ -478,6 +478,49 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 ops.push(ScriptOp::Translate(x, y));
                 rest = tail;
             }
+            0x01 => {
+                if rest.len() < 18 {
+                    return Err("draw_line opcode truncated".to_string());
+                }
+                let (flag_bytes, tail) = rest.split_at(2);
+                let flag = u16::from_be_bytes([flag_bytes[0], flag_bytes[1]]);
+                let (x0_bytes, tail) = tail.split_at(4);
+                let (y0_bytes, tail) = tail.split_at(4);
+                let (x1_bytes, tail) = tail.split_at(4);
+                let (y1_bytes, tail) = tail.split_at(4);
+                let x0 = f32::from_bits(u32::from_be_bytes([
+                    x0_bytes[0],
+                    x0_bytes[1],
+                    x0_bytes[2],
+                    x0_bytes[3],
+                ]));
+                let y0 = f32::from_bits(u32::from_be_bytes([
+                    y0_bytes[0],
+                    y0_bytes[1],
+                    y0_bytes[2],
+                    y0_bytes[3],
+                ]));
+                let x1 = f32::from_bits(u32::from_be_bytes([
+                    x1_bytes[0],
+                    x1_bytes[1],
+                    x1_bytes[2],
+                    x1_bytes[3],
+                ]));
+                let y1 = f32::from_bits(u32::from_be_bytes([
+                    y1_bytes[0],
+                    y1_bytes[1],
+                    y1_bytes[2],
+                    y1_bytes[3],
+                ]));
+                ops.push(ScriptOp::DrawLine {
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    flag,
+                });
+                rest = tail;
+            }
             0x04 => {
                 if rest.len() < 10 {
                     return Err("draw_rect opcode truncated".to_string());
@@ -499,6 +542,19 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 });
                 rest = tail;
             }
+            0x08 => {
+                if rest.len() < 6 {
+                    return Err("draw_circle opcode truncated".to_string());
+                }
+                let (flag_bytes, tail) = rest.split_at(2);
+                let flag = u16::from_be_bytes([flag_bytes[0], flag_bytes[1]]);
+                let (r_bytes, tail) = tail.split_at(4);
+                let radius = f32::from_bits(u32::from_be_bytes([
+                    r_bytes[0], r_bytes[1], r_bytes[2], r_bytes[3],
+                ]));
+                ops.push(ScriptOp::DrawCircle { radius, flag });
+                rest = tail;
+            }
             0x0A => {
                 if rest.len() < 2 {
                     return Err("draw_text opcode truncated".to_string());
@@ -515,6 +571,26 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 ops.push(ScriptOp::DrawText(text));
                 rest = &tail[pad..];
             }
+            0x70 => {
+                if rest.len() < 2 {
+                    return Err("stroke_width opcode truncated".to_string());
+                }
+                let (width_bytes, tail) = rest.split_at(2);
+                let width = u16::from_be_bytes([width_bytes[0], width_bytes[1]]);
+                ops.push(ScriptOp::StrokeWidth(width as f32 / 4.0));
+                rest = tail;
+            }
+            0x71 => {
+                if rest.len() < 6 {
+                    return Err("stroke_color opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (rgba, tail) = tail.split_at(4);
+                ops.push(ScriptOp::StrokeColor(skia_safe::Color::from_argb(
+                    rgba[3], rgba[0], rgba[1], rgba[2],
+                )));
+                rest = tail;
+            }
             0x90 => {
                 if rest.len() < 2 {
                     return Err("font opcode truncated".to_string());
@@ -526,13 +602,50 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 if tail.len() < total {
                     return Err("font payload truncated".to_string());
                 }
-                rest = &tail[total..];
+                let (font_bytes, tail) = tail.split_at(len);
+                let font_id = String::from_utf8_lossy(font_bytes).to_string();
+                ops.push(ScriptOp::Font(font_id));
+                rest = &tail[pad..];
             }
-            0x91 | 0x92 | 0x93 => {
+            0x91 => {
                 if rest.len() < 2 {
-                    return Err("text style opcode truncated".to_string());
+                    return Err("font_size opcode truncated".to_string());
                 }
-                rest = &rest[2..];
+                let (size_bytes, tail) = rest.split_at(2);
+                let size = u16::from_be_bytes([size_bytes[0], size_bytes[1]]);
+                ops.push(ScriptOp::FontSize(size as f32 / 4.0));
+                rest = tail;
+            }
+            0x92 => {
+                if rest.len() < 2 {
+                    return Err("text_align opcode truncated".to_string());
+                }
+                let (align_bytes, tail) = rest.split_at(2);
+                let align = u16::from_be_bytes([align_bytes[0], align_bytes[1]]);
+                let align = match align {
+                    0x00 => renderer::TextAlign::Left,
+                    0x01 => renderer::TextAlign::Center,
+                    0x02 => renderer::TextAlign::Right,
+                    _ => return Err("unsupported text_align value".to_string()),
+                };
+                ops.push(ScriptOp::TextAlign(align));
+                rest = tail;
+            }
+            0x93 => {
+                if rest.len() < 2 {
+                    return Err("text_base opcode truncated".to_string());
+                }
+                let (base_bytes, tail) = rest.split_at(2);
+                let base = u16::from_be_bytes([base_bytes[0], base_bytes[1]]);
+                let base = match base {
+                    0x00 => renderer::TextBase::Top,
+                    0x01 => renderer::TextBase::Middle,
+                    0x02 => renderer::TextBase::Alphabetic,
+                    0x03 => renderer::TextBase::Bottom,
+                    _ => return Err("unsupported text_base value".to_string()),
+                };
+                ops.push(ScriptOp::TextBase(base));
+                rest = tail;
             }
             _ => {
                 return Err(format!("unsupported opcode: 0x{opcode:02x}"));
@@ -540,338 +653,6 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
         }
     }
     Ok(ops)
-}
-
-fn parse_script_terms(script: rustler::Term) -> Result<Vec<ScriptOp>, String> {
-    let atom_push_state = atoms::push_state();
-    let atom_pop_state = atoms::pop_state();
-    let atom_pop_push_state = atoms::pop_push_state();
-    let atom_translate = atoms::translate();
-    let atom_fill_color = atoms::fill_color();
-    let atom_draw_rect = atoms::draw_rect();
-    let atom_draw_text = atoms::draw_text();
-    let atom_script = atoms::script();
-    let atom_fill = atoms::fill();
-    let atom_fill_stroke = atoms::fill_stroke();
-    let atom_stroke = atoms::stroke();
-    let atom_color_rgba = atoms::color_rgba();
-
-    let iter: ListIterator = script
-        .decode()
-        .map_err(|_| "script must be a list".to_string())?;
-    let (lower, _) = iter.size_hint();
-    let mut ops = Vec::with_capacity(lower);
-
-    for op in iter {
-        if op.is_atom() {
-            if atom_push_state == op {
-                ops.push(ScriptOp::PushState);
-                continue;
-            }
-            if atom_pop_state == op {
-                ops.push(ScriptOp::PopState);
-                continue;
-            }
-            if atom_pop_push_state == op {
-                ops.push(ScriptOp::PopPushState);
-                continue;
-            }
-            return Err("unsupported atom op".to_string());
-        }
-
-        if !op.is_tuple() {
-            return Err("unsupported op term".to_string());
-        }
-
-        let elements = tuple_terms(op).map_err(|_| "op tuple decode failed".to_string())?;
-        if elements.len() != 2 {
-            return Err("unsupported op tuple arity".to_string());
-        }
-
-        let env = op.get_env();
-        let tag = unsafe { rustler::Term::new(env, elements[0]) };
-        let payload = unsafe { rustler::Term::new(env, elements[1]) };
-
-        if atom_translate == tag {
-            let values =
-                tuple_terms(payload).map_err(|_| "translate tuple decode failed".to_string())?;
-            if values.len() != 2 {
-                return Err("translate tuple arity mismatch".to_string());
-            }
-            let x = decode_f32(unsafe { rustler::Term::new(env, values[0]) })?;
-            let y = decode_f32(unsafe { rustler::Term::new(env, values[1]) })?;
-            ops.push(ScriptOp::Translate(x, y));
-            continue;
-        }
-
-        if atom_fill_color == tag {
-            let (r, g, b, a) = decode_color_rgba(payload, atom_color_rgba)?;
-            ops.push(ScriptOp::FillColor(skia_safe::Color::from_argb(a, r, g, b)));
-            continue;
-        }
-
-        if atom_draw_rect == tag {
-            let values =
-                tuple_terms(payload).map_err(|_| "draw_rect tuple decode failed".to_string())?;
-            if values.len() != 3 {
-                return Err("draw_rect tuple arity mismatch".to_string());
-            }
-            let width = decode_f32(unsafe { rustler::Term::new(env, values[0]) })?;
-            let height = decode_f32(unsafe { rustler::Term::new(env, values[1]) })?;
-            let flag = decode_flag(
-                unsafe { rustler::Term::new(env, values[2]) },
-                atom_fill,
-                atom_fill_stroke,
-                atom_stroke,
-            )?;
-            ops.push(ScriptOp::DrawRect {
-                width,
-                height,
-                flag,
-            });
-            continue;
-        }
-
-        if atom_draw_text == tag {
-            let text = payload
-                .decode::<String>()
-                .map_err(|_| "draw_text payload decode failed".to_string())?;
-            ops.push(ScriptOp::DrawText(text));
-            continue;
-        }
-
-        if atom_script == tag {
-            let id = payload
-                .decode::<String>()
-                .map_err(|_| "draw_script id decode failed".to_string())?;
-            ops.push(ScriptOp::DrawScript(id));
-            continue;
-        }
-
-        return Err("unsupported op".to_string());
-    }
-
-    Ok(ops)
-}
-
-fn parse_script_terms2(script: rustler::Term) -> Result<Vec<ScriptOp>, String> {
-    let atom_push_state = atoms::push_state();
-    let atom_pop_state = atoms::pop_state();
-    let atom_pop_push_state = atoms::pop_push_state();
-    let atom_translate = atoms::translate();
-    let atom_fill_color = atoms::fill_color();
-    let atom_draw_rect = atoms::draw_rect();
-    let atom_draw_text = atoms::draw_text();
-    let atom_script = atoms::script();
-    let atom_fill = atoms::fill();
-    let atom_fill_stroke = atoms::fill_stroke();
-    let atom_stroke = atoms::stroke();
-    let atom_color_rgba = atoms::color_rgba();
-
-    let iter: ListIterator = script
-        .decode()
-        .map_err(|_| "script must be a list".to_string())?;
-    let (lower, _) = iter.size_hint();
-    let mut ops = Vec::with_capacity(lower);
-    for op in iter {
-        if op.is_atom() {
-            if atom_push_state == op {
-                ops.push(ScriptOp::PushState);
-                continue;
-            }
-            if atom_pop_state == op {
-                ops.push(ScriptOp::PopState);
-                continue;
-            }
-            if atom_pop_push_state == op {
-                ops.push(ScriptOp::PopPushState);
-                continue;
-            }
-            return Err("unsupported atom op".to_string());
-        }
-
-        if !op.is_tuple() {
-            return Err("unsupported op term".to_string());
-        }
-
-        let elements = tuple_terms(op).map_err(|_| "op tuple decode failed".to_string())?;
-        if elements.len() != 2 {
-            return Err("unsupported op tuple arity".to_string());
-        }
-
-        let env = op.get_env();
-        let tag = unsafe { rustler::Term::new(env, elements[0]) };
-        let payload = unsafe { rustler::Term::new(env, elements[1]) };
-
-        if atom_translate == tag {
-            let values =
-                tuple_terms(payload).map_err(|_| "translate tuple decode failed".to_string())?;
-            if values.len() != 2 {
-                return Err("translate tuple arity mismatch".to_string());
-            }
-            let x = decode_f32(unsafe { rustler::Term::new(env, values[0]) })?;
-            let y = decode_f32(unsafe { rustler::Term::new(env, values[1]) })?;
-            ops.push(ScriptOp::Translate(x, y));
-            continue;
-        }
-
-        if atom_fill_color == tag {
-            let (r, g, b, a) = decode_color_rgba(payload, atom_color_rgba)?;
-            ops.push(ScriptOp::FillColor(skia_safe::Color::from_argb(a, r, g, b)));
-            continue;
-        }
-
-        if atom_draw_rect == tag {
-            let values =
-                tuple_terms(payload).map_err(|_| "draw_rect tuple decode failed".to_string())?;
-            if values.len() != 3 {
-                return Err("draw_rect tuple arity mismatch".to_string());
-            }
-            let width = decode_f32(unsafe { rustler::Term::new(env, values[0]) })?;
-            let height = decode_f32(unsafe { rustler::Term::new(env, values[1]) })?;
-            let flag = decode_flag(
-                unsafe { rustler::Term::new(env, values[2]) },
-                atom_fill,
-                atom_fill_stroke,
-                atom_stroke,
-            )?;
-            ops.push(ScriptOp::DrawRect {
-                width,
-                height,
-                flag,
-            });
-            continue;
-        }
-
-        if atom_draw_text == tag {
-            let text = payload
-                .decode::<String>()
-                .map_err(|_| "draw_text payload decode failed".to_string())?;
-            ops.push(ScriptOp::DrawText(text));
-            continue;
-        }
-
-        if atom_script == tag {
-            let id = payload
-                .decode::<String>()
-                .map_err(|_| "draw_script id decode failed".to_string())?;
-            ops.push(ScriptOp::DrawScript(id));
-            continue;
-        }
-
-        return Err("unsupported op".to_string());
-    }
-
-    Ok(ops)
-}
-
-fn decode_f32(term: rustler::Term) -> Result<f32, String> {
-    if let Ok(value) = term.decode::<f64>() {
-        return Ok(value as f32);
-    }
-    if let Ok(value) = term.decode::<i64>() {
-        return Ok(value as f32);
-    }
-    Err("expected numeric value".to_string())
-}
-
-fn decode_u8(term: rustler::Term) -> Result<u8, String> {
-    if let Ok(value) = term.decode::<u8>() {
-        return Ok(value);
-    }
-    if let Ok(value) = term.decode::<u64>() {
-        if value > u8::MAX as u64 {
-            return Err("value out of u8 range".to_string());
-        }
-        return Ok(value as u8);
-    }
-    if let Ok(value) = term.decode::<i64>() {
-        if value < 0 || value > u8::MAX as i64 {
-            return Err("value out of u8 range".to_string());
-        }
-        return Ok(value as u8);
-    }
-    Err("expected u8 value".to_string())
-}
-
-fn decode_flag(
-    term: rustler::Term,
-    atom_fill: Atom,
-    atom_fill_stroke: Atom,
-    atom_stroke: Atom,
-) -> Result<u16, String> {
-    if term.is_atom() {
-        if atom_fill == term {
-            return Ok(0x01);
-        }
-        if atom_fill_stroke == term {
-            return Ok(0x03);
-        }
-        if atom_stroke == term {
-            return Ok(0x02);
-        }
-        return Err("unsupported draw flag atom".to_string());
-    }
-
-    if let Ok(value) = term.decode::<u16>() {
-        return Ok(value);
-    }
-    if let Ok(value) = term.decode::<u64>() {
-        return Ok(value as u16);
-    }
-    if let Ok(value) = term.decode::<i64>() {
-        if value < 0 {
-            return Err("draw flag out of range".to_string());
-        }
-        return Ok(value as u16);
-    }
-    Err("unsupported draw flag term".to_string())
-}
-
-fn decode_color_rgba(
-    term: rustler::Term,
-    atom_color_rgba: Atom,
-) -> Result<(u8, u8, u8, u8), String> {
-    let parts = tuple_terms(term).map_err(|_| "fill_color tuple decode failed".to_string())?;
-
-    if parts.len() == 4 {
-        return Ok((
-            decode_u8(unsafe { rustler::Term::new(term.get_env(), parts[0]) })?,
-            decode_u8(unsafe { rustler::Term::new(term.get_env(), parts[1]) })?,
-            decode_u8(unsafe { rustler::Term::new(term.get_env(), parts[2]) })?,
-            decode_u8(unsafe { rustler::Term::new(term.get_env(), parts[3]) })?,
-        ));
-    }
-
-    if parts.len() != 2 {
-        return Err("fill_color tuple arity mismatch".to_string());
-    }
-
-    let env = term.get_env();
-    let tag = unsafe { rustler::Term::new(env, parts[0]) };
-    if atom_color_rgba != tag {
-        return Err("unsupported fill_color format".to_string());
-    }
-
-    let rgba = tuple_terms(unsafe { rustler::Term::new(env, parts[1]) })
-        .map_err(|_| "color_rgba tuple decode failed".to_string())?;
-    if rgba.len() != 4 {
-        return Err("color_rgba tuple arity mismatch".to_string());
-    }
-
-    Ok((
-        decode_u8(unsafe { rustler::Term::new(env, rgba[0]) })?,
-        decode_u8(unsafe { rustler::Term::new(env, rgba[1]) })?,
-        decode_u8(unsafe { rustler::Term::new(env, rgba[2]) })?,
-        decode_u8(unsafe { rustler::Term::new(env, rgba[3]) })?,
-    ))
-}
-
-fn tuple_terms<'a>(term: rustler::Term<'a>) -> Result<&'a [rustler::wrapper::NIF_TERM], String> {
-    unsafe {
-        tuple_wrapper::get_tuple(term.get_env().as_c_arg(), term.as_c_arg())
-            .map_err(|_| "tuple decode failed".to_string())
-    }
 }
 
 rustler::init!("Elixir.ScenicDriverSkia.Native");
@@ -956,5 +737,41 @@ mod tests {
         let script: [u8; 8] = [0x00, 0x0A, 0x00, 0x02, b'h', b'i', 0x00, 0x00];
         let ops = parse_script(&script).expect("parse_script failed");
         assert_eq!(ops, vec![ScriptOp::DrawText("hi".to_string())]);
+    }
+
+    #[test]
+    fn parse_draw_line_and_stroke() {
+        let script: [u8; 32] = [
+            0x00, 0x70, 0x00, 0x08, 0x00, 0x71, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x01,
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x20, 0x00, 0x00,
+            0x41, 0xA0, 0x00, 0x00,
+        ];
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert!(ops.contains(&ScriptOp::StrokeWidth(2.0)));
+        assert!(
+            ops.contains(&ScriptOp::StrokeColor(skia_safe::Color::from_argb(
+                0xFF, 0x00, 0x00, 0xFF
+            )))
+        );
+        assert!(ops.contains(&ScriptOp::DrawLine {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 10.0,
+            y1: 20.0,
+            flag: 0x02
+        }));
+    }
+
+    #[test]
+    fn parse_draw_circle() {
+        let script: [u8; 8] = [0x00, 0x08, 0x00, 0x03, 0x42, 0x48, 0x00, 0x00];
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert_eq!(
+            ops,
+            vec![ScriptOp::DrawCircle {
+                radius: 50.0,
+                flag: 0x03
+            }]
+        );
     }
 }
