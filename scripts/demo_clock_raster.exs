@@ -1,23 +1,28 @@
-defmodule ScenicDriverSkia.DemoRaster do
+defmodule ScenicDriverSkia.DemoClockRaster do
   defmodule DemoScene do
     use Scenic.Scene
+
     import Scenic.Clock.Components
     import Scenic.Primitives
 
     def init(scene, _args, _opts) do
       graph =
         Scenic.Graph.build()
-        |> rect({200, 120}, fill: :green, translate: {50, 50})
-        |> text("Skia Raster", fill: :orange, translate: {60, 90})
-        |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+        |> analog_clock(
+          radius: 60,
+          seconds: true,
+          translate: {100, 100},
+          theme: :light
+        )
         |> digital_clock(
           format: :hours_12,
           seconds: true,
-          translate: {50, 200},
+          translate: {220, 120},
           font: :roboto_mono,
           font_size: 18,
           fill: :white
         )
+        |> rect({420, 200}, stroke: {2, :white})
 
       scene = Scenic.Scene.push_graph(scene, graph)
       {:ok, scene}
@@ -25,13 +30,13 @@ defmodule ScenicDriverSkia.DemoRaster do
   end
 
   def run do
-    output = Path.expand("priv/raster_demo.png")
+    output = Path.expand("priv/raster_clock.png")
 
     {:ok, _} = DynamicSupervisor.start_link(name: :scenic_viewports, strategy: :one_for_one)
 
     {:ok, _vp} =
       Scenic.ViewPort.start(
-        size: {400, 300},
+        size: {480, 240},
         default_scene: DemoScene,
         drivers: [
           [
@@ -48,4 +53,4 @@ defmodule ScenicDriverSkia.DemoRaster do
   end
 end
 
-ScenicDriverSkia.DemoRaster.run()
+ScenicDriverSkia.DemoClockRaster.run()

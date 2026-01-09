@@ -1,6 +1,7 @@
 defmodule ScenicDriverSkia.DemoWayland do
   defmodule DemoScene do
     use Scenic.Scene
+    import Scenic.Clock.Components
     import Scenic.Primitives
 
     def init(scene, _args, _opts) do
@@ -10,6 +11,15 @@ defmodule ScenicDriverSkia.DemoWayland do
         Scenic.Graph.build()
         |> rect({200, 120}, fill: :blue, translate: {50, 50})
         |> text("Skia Wayland", fill: :yellow, translate: {60, 90})
+        |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+        |> digital_clock(
+          format: :hours_12,
+          seconds: true,
+          translate: {50, 200},
+          font: :roboto_mono,
+          font_size: 18,
+          fill: :white
+        )
 
       scene = Scenic.Scene.push_graph(scene, graph)
       {:ok, scene}
@@ -20,6 +30,15 @@ defmodule ScenicDriverSkia.DemoWayland do
         Scenic.Graph.build()
         |> rect({200, 120}, fill: :red, translate: {50, 50})
         |> text("Skia Wayland", fill: :yellow, translate: {60, 90})
+        |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+        |> digital_clock(
+          format: :hours_12,
+          seconds: true,
+          translate: {50, 200},
+          font: :roboto_mono,
+          font_size: 18,
+          fill: :white
+        )
 
       scene = Scenic.Scene.push_graph(scene, graph)
       {:noreply, scene}
