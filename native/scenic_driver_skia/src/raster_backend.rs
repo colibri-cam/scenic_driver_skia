@@ -42,13 +42,11 @@ pub fn run(
     let surface =
         surfaces::raster(&image_info, None, None).expect("Failed to create raster surface");
 
-    let initial_state = {
-        let state = render_state.lock().unwrap_or_else(|e| e.into_inner());
-        state.clone()
-    };
     let initial_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let mut renderer = Renderer::from_surface(surface, None, initial_text, initial_state);
-    renderer.redraw();
+    let mut renderer = Renderer::from_surface(surface, None, initial_text);
+    if let Ok(state) = render_state.lock() {
+        renderer.redraw(&state);
+    }
 
     if let Some(path) = output_path.lock().ok().and_then(|p| p.clone()) {
         write_png(renderer.surface_mut(), &path);
@@ -60,10 +58,10 @@ pub fn run(
         }
         if dirty.swap(false, Ordering::Relaxed) {
             let updated_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            let state = render_state.lock().unwrap_or_else(|e| e.into_inner());
             renderer.set_text(updated_text);
-            renderer.set_state(state.clone());
-            renderer.redraw();
+            if let Ok(state) = render_state.lock() {
+                renderer.redraw(&state);
+            }
             if let Some(path) = output_path.lock().ok().and_then(|p| p.clone()) {
                 write_png(renderer.surface_mut(), &path);
             }

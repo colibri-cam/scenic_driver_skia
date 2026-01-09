@@ -2,7 +2,7 @@ use std::{
     ffi::CString,
     num::NonZeroU32,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc::Sender,
     },
@@ -34,7 +34,7 @@ pub enum UserEvent {
     Stop,
     SetText(String),
     Start,
-    SetRenderState(RenderState),
+    Redraw,
 }
 
 struct Env {
@@ -49,14 +49,15 @@ struct App {
     running: bool,
     running_flag: Arc<AtomicBool>,
     current_text: String,
-    render_state: RenderState,
+    render_state: Arc<Mutex<RenderState>>,
 }
 
 impl App {
     fn redraw(&mut self) {
         if let (Some(env), Some(renderer)) = (self.env.as_mut(), self.renderer.as_mut()) {
-            renderer.set_state(self.render_state.clone());
-            renderer.redraw();
+            if let Ok(render_state) = self.render_state.lock() {
+                renderer.redraw(&render_state);
+            }
             env.gl_surface
                 .swap_buffers(&env.gl_context)
                 .expect("swap_buffers failed");
@@ -69,7 +70,6 @@ impl App {
                 match create_env_renderer_with_active_event_loop(
                     event_loop,
                     self.current_text.clone(),
-                    self.render_state.clone(),
                 ) {
                     Ok((env, renderer)) => {
                         self.env = Some(env);
@@ -101,7 +101,6 @@ impl App {
 fn create_env_renderer_with_event_loop(
     event_loop: &EventLoop<UserEvent>,
     initial_text: String,
-    render_state: RenderState,
 ) -> Result<(Env, Renderer), String> {
     let window_attributes = WindowAttributes::default()
         .with_title("skia-wayland-hello")
@@ -207,7 +206,6 @@ fn create_env_renderer_with_event_loop(
         num_samples,
         stencil_size,
         initial_text,
-        render_state,
     );
 
     let env = Env {
@@ -222,7 +220,6 @@ fn create_env_renderer_with_event_loop(
 fn create_env_renderer_with_active_event_loop(
     event_loop: &winit::event_loop::ActiveEventLoop,
     initial_text: String,
-    render_state: RenderState,
 ) -> Result<(Env, Renderer), String> {
     let window_attributes = WindowAttributes::default()
         .with_title("skia-wayland-hello")
@@ -328,7 +325,6 @@ fn create_env_renderer_with_active_event_loop(
         num_samples,
         stencil_size,
         initial_text,
-        render_state,
     );
 
     let env = Env {
@@ -392,8 +388,7 @@ impl ApplicationHandler<UserEvent> for App {
                     self.redraw();
                 }
             }
-            UserEvent::SetRenderState(render_state) => {
-                self.render_state = render_state;
+            UserEvent::Redraw => {
                 if self.running {
                     self.redraw();
                 }
@@ -406,18 +401,14 @@ pub fn run(
     proxy_ready: Sender<EventLoopProxy<UserEvent>>,
     initial_text: String,
     running_flag: Arc<AtomicBool>,
-    render_state: RenderState,
+    render_state: Arc<Mutex<RenderState>>,
 ) {
     let mut el_builder = EventLoop::<UserEvent>::with_user_event();
     EventLoopBuilderExtWayland::with_any_thread(&mut el_builder, true);
     let el = el_builder.build().expect("Failed to create event loop");
     let proxy = el.create_proxy();
     let _ = proxy_ready.send(proxy);
-    let (env, renderer) = match create_env_renderer_with_event_loop(
-        &el,
-        initial_text.clone(),
-        render_state.clone(),
-    ) {
+    let (env, renderer) = match create_env_renderer_with_event_loop(&el, initial_text.clone()) {
         Ok(values) => values,
         Err(err) => {
             eprintln!("Failed to initialize renderer: {err}");

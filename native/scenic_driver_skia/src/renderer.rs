@@ -103,7 +103,6 @@ pub struct Renderer {
     gr_context: Option<skia_safe::gpu::DirectContext>,
     source: SurfaceSource,
     text: String,
-    render_state: RenderState,
 }
 
 impl Renderer {
@@ -114,7 +113,6 @@ impl Renderer {
         num_samples: usize,
         stencil_size: usize,
         text: String,
-        render_state: RenderState,
     ) -> Self {
         let mut gr_context = gr_context;
         let surface = create_skia_surface(
@@ -134,7 +132,6 @@ impl Renderer {
                 stencil_size,
             },
             text,
-            render_state,
         }
     }
 
@@ -142,14 +139,12 @@ impl Renderer {
         surface: Surface,
         gr_context: Option<skia_safe::gpu::DirectContext>,
         text: String,
-        render_state: RenderState,
     ) -> Self {
         Self {
             surface,
             gr_context,
             source: SurfaceSource::Raster,
             text,
-            render_state,
         }
     }
 
@@ -157,16 +152,11 @@ impl Renderer {
         self.text = text;
     }
 
-    pub fn set_state(&mut self, render_state: RenderState) {
-        self.render_state = render_state;
-    }
-
     pub fn surface_mut(&mut self) -> &mut Surface {
         &mut self.surface
     }
 
-    pub fn redraw(&mut self) {
-        let render_state = self.render_state.clone();
+    pub fn redraw(&mut self, render_state: &RenderState) {
         let canvas = self.surface.canvas();
         canvas.clear(render_state.clear_color);
 
@@ -174,7 +164,7 @@ impl Renderer {
             let mut draw_state = DrawState::default();
             let mut stack_ids = Vec::new();
             draw_script(
-                &render_state,
+                render_state,
                 &root_id,
                 canvas,
                 &mut draw_state,
@@ -351,11 +341,15 @@ fn draw_script(
 }
 
 fn default_font(size: f32) -> Option<Font> {
-    let fm = FontMgr::new();
-    let tf = fm
-        .match_family_style("DejaVu Sans", FontStyle::normal())
-        .or_else(|| fm.match_family_style("Sans", FontStyle::normal()))?;
-    Some(Font::new(tf, size))
+    static DEFAULT_TYPEFACE: OnceLock<Option<Typeface>> = OnceLock::new();
+    let typeface = DEFAULT_TYPEFACE
+        .get_or_init(|| {
+            let fm = FontMgr::new();
+            fm.match_family_style("DejaVu Sans", FontStyle::normal())
+                .or_else(|| fm.match_family_style("Sans", FontStyle::normal()))
+        })
+        .clone()?;
+    Some(Font::new(typeface, size))
 }
 
 fn font_from_asset(font_id: &str, size: f32) -> Option<Font> {

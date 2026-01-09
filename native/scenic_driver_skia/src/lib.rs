@@ -138,13 +138,12 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
             .map_err(|_| "driver state lock poisoned".to_string())?
             .clone();
         let running_for_thread = Arc::clone(&running);
-        let initial_state = render_state
-            .lock()
-            .map_err(|_| "driver state lock poisoned".to_string())?
-            .clone();
+        let state_for_thread = Arc::clone(&render_state);
         let thread = thread::Builder::new()
             .name(thread_name)
-            .spawn(move || backend::run(proxy_tx, initial_text, running_for_thread, initial_state))
+            .spawn(move || {
+                backend::run(proxy_tx, initial_text, running_for_thread, state_for_thread)
+            })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
         let proxy = proxy_rx
             .recv_timeout(Duration::from_secs(5))
@@ -272,6 +271,21 @@ pub fn submit_script_with_id(id: String, script: rustler::Binary) -> Result<(), 
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
+pub fn submit_scripts(scripts: Vec<(String, rustler::Binary)>) -> Result<(), String> {
+    update_render_state(|state| {
+        let mut staged: Vec<(String, Vec<ScriptOp>)> = Vec::with_capacity(scripts.len());
+        for (id, script) in scripts.iter() {
+            let ops = parse_script(script.as_slice())?;
+            staged.push((id.clone(), ops));
+        }
+        for (id, ops) in staged {
+            set_script(state, id, ops);
+        }
+        Ok(())
+    })
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn del_script(id: String) -> Result<(), String> {
     update_render_state(|state| {
         state.scripts.remove(&id);
@@ -280,6 +294,21 @@ pub fn del_script(id: String) -> Result<(), String> {
         }
         Ok(())
     })
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn script_count() -> Result<u64, String> {
+    let state = driver_state()
+        .lock()
+        .map_err(|_| "driver state lock poisoned".to_string())?;
+    let handle = state
+        .as_ref()
+        .ok_or_else(|| "renderer not running".to_string())?;
+    let render_state = handle
+        .render_state
+        .lock()
+        .map_err(|_| "render state lock poisoned".to_string())?;
+    Ok(render_state.scripts.len() as u64)
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
@@ -323,12 +352,11 @@ where
         .lock()
         .map_err(|_| "render state lock poisoned".to_string())?;
     update(&mut render_state)?;
-    let render_state_snapshot = render_state.clone();
     drop(render_state);
 
     match &handle.stop {
         StopSignal::Wayland(proxy) => proxy
-            .send_event(UserEvent::SetRenderState(render_state_snapshot))
+            .send_event(UserEvent::Redraw)
             .map_err(|err| format!("failed to signal renderer: {err}")),
         StopSignal::Drm(_) | StopSignal::Raster(_) => {
             if let Some(dirty) = &handle.dirty {

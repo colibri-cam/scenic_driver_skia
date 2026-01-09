@@ -145,12 +145,10 @@ pub fn run(
         .expect("Failed to create raster surface for KMS");
 
     let initial_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let initial_state = {
-        let state = render_state.lock().unwrap_or_else(|e| e.into_inner());
-        state.clone()
-    };
-    let mut renderer = Renderer::from_surface(surface, None, initial_text, initial_state);
-    renderer.redraw();
+    let mut renderer = Renderer::from_surface(surface, None, initial_text);
+    if let Ok(state) = render_state.lock() {
+        renderer.redraw(&state);
+    }
 
     loop {
         if stop.load(Ordering::Relaxed) {
@@ -158,10 +156,10 @@ pub fn run(
         }
         if dirty.swap(false, Ordering::Relaxed) {
             let updated = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            let state = render_state.lock().unwrap_or_else(|e| e.into_inner());
             renderer.set_text(updated);
-            renderer.set_state(state.clone());
-            renderer.redraw();
+            if let Ok(state) = render_state.lock() {
+                renderer.redraw(&state);
+            }
         }
         std::thread::sleep(Duration::from_millis(500));
     }
