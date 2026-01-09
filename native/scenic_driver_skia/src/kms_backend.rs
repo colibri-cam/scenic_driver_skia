@@ -147,7 +147,7 @@ pub fn run(
     let initial_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let initial_state = {
         let state = render_state.lock().unwrap_or_else(|e| e.into_inner());
-        *state
+        state.clone()
     };
     let mut renderer = Renderer::from_surface(surface, None, initial_text, initial_state);
     renderer.redraw();
@@ -160,7 +160,7 @@ pub fn run(
             let updated = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let state = render_state.lock().unwrap_or_else(|e| e.into_inner());
             renderer.set_text(updated);
-            renderer.set_state(*state);
+            renderer.set_state(state.clone());
             renderer.redraw();
         }
         std::thread::sleep(Duration::from_millis(500));

@@ -79,10 +79,12 @@ defmodule ScenicDriverSkia.Driver do
     Enum.each(script_ids, fn id ->
       case ViewPort.get_script(vp, id) do
         {:ok, script} ->
-          script
-          |> Script.serialize()
-          |> IO.iodata_to_binary()
-          |> Native.submit_script()
+          binary =
+            script
+            |> Script.serialize()
+            |> IO.iodata_to_binary()
+
+          Native.submit_script_with_id(to_string(id), binary)
           |> case do
             :ok -> :ok
             {:ok, _} -> :ok
@@ -101,6 +103,7 @@ defmodule ScenicDriverSkia.Driver do
   @impl Scenic.Driver
   def del_scripts(script_ids, driver) do
     Logger.debug("ScenicDriverSkia.Driver del_scripts: #{inspect(script_ids)}")
+    Enum.each(script_ids, &Native.del_script(to_string(&1)))
     {:ok, driver}
   end
 

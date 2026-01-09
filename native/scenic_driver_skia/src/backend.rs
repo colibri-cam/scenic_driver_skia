@@ -55,7 +55,7 @@ struct App {
 impl App {
     fn redraw(&mut self) {
         if let (Some(env), Some(renderer)) = (self.env.as_mut(), self.renderer.as_mut()) {
-            renderer.set_state(self.render_state);
+            renderer.set_state(self.render_state.clone());
             renderer.redraw();
             env.gl_surface
                 .swap_buffers(&env.gl_context)
@@ -69,7 +69,7 @@ impl App {
                 match create_env_renderer_with_active_event_loop(
                     event_loop,
                     self.current_text.clone(),
-                    self.render_state,
+                    self.render_state.clone(),
                 ) {
                     Ok((env, renderer)) => {
                         self.env = Some(env);
@@ -415,15 +415,18 @@ pub fn run(
     let el = el_builder.build().expect("Failed to create event loop");
     let proxy = el.create_proxy();
     let _ = proxy_ready.send(proxy);
-    let (env, renderer) =
-        match create_env_renderer_with_event_loop(&el, initial_text.clone(), render_state) {
-            Ok(values) => values,
-            Err(err) => {
-                eprintln!("Failed to initialize renderer: {err}");
-                running_flag.store(false, Ordering::Relaxed);
-                return;
-            }
-        };
+    let (env, renderer) = match create_env_renderer_with_event_loop(
+        &el,
+        initial_text.clone(),
+        render_state.clone(),
+    ) {
+        Ok(values) => values,
+        Err(err) => {
+            eprintln!("Failed to initialize renderer: {err}");
+            running_flag.store(false, Ordering::Relaxed);
+            return;
+        }
+    };
 
     let mut app = App {
         env: Some(env),

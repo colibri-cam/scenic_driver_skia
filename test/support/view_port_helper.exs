@@ -11,6 +11,7 @@ defmodule ScenicDriverSkia.TestSupport.ViewPort do
 
   def start(opts \\ []) do
     ensure_viewport_supervisor()
+    ensure_renderer_stopped()
 
     scene = Keyword.get(opts, :scene, DefaultScene)
 
@@ -33,8 +34,22 @@ defmodule ScenicDriverSkia.TestSupport.ViewPort do
 
   defp ensure_viewport_supervisor do
     case DynamicSupervisor.start_link(name: :scenic_viewports, strategy: :one_for_one) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
+      {:ok, pid} ->
+        Process.unlink(pid)
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+    end
+  end
+
+  defp ensure_renderer_stopped do
+    case ScenicDriverSkia.Native.stop() do
+      :ok -> :ok
+      {:ok, _} -> :ok
+      {:error, "renderer not running"} -> :ok
+      {:error, _reason} -> :ok
+      _ -> :ok
     end
   end
 end

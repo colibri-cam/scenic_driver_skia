@@ -14,6 +14,18 @@ defmodule ScenicDriverSkia.Native do
   def submit_script(_script), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc false
+  def submit_script_terms(_script), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def submit_script_terms2(_script), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def submit_script_with_id(_id, _script), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def del_script(_id), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
   def set_clear_color(_color), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc false
