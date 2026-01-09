@@ -14,25 +14,6 @@ use std::time::Duration;
 
 use backend::UserEvent;
 use renderer::{RenderState, ScriptOp};
-use rustler::types::{atom::Atom, list::ListIterator};
-use rustler::wrapper::tuple as tuple_wrapper;
-
-mod atoms {
-    rustler::atoms! {
-        push_state,
-        pop_state,
-        pop_push_state,
-        translate,
-        fill_color,
-        draw_rect,
-        draw_text,
-        script,
-        fill,
-        fill_stroke,
-        stroke,
-        color_rgba,
-    }
-}
 
 enum StopSignal {
     Wayland(winit::event_loop::EventLoopProxy<UserEvent>),
@@ -276,24 +257,6 @@ pub fn set_clear_color(color: (u8, u8, u8, u8)) -> Result<(), String> {
 pub fn submit_script(script: rustler::Binary) -> Result<(), String> {
     update_render_state(|state| {
         let ops = parse_script(script.as_slice())?;
-        set_script(state, ROOT_ID.to_string(), ops);
-        Ok(())
-    })
-}
-
-#[rustler::nif(schedule = "DirtyCpu")]
-pub fn submit_script_terms(script: rustler::Term) -> Result<(), String> {
-    update_render_state(|state| {
-        let ops = parse_script_terms(script)?;
-        set_script(state, ROOT_ID.to_string(), ops);
-        Ok(())
-    })
-}
-
-#[rustler::nif(schedule = "DirtyCpu")]
-pub fn submit_script_terms2(script: rustler::Term) -> Result<(), String> {
-    update_render_state(|state| {
-        let ops = parse_script_terms2(script)?;
         set_script(state, ROOT_ID.to_string(), ops);
         Ok(())
     })

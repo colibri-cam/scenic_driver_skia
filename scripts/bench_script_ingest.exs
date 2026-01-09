@@ -47,13 +47,6 @@ defmodule ScenicDriverSkia.BenchScriptIngest do
           end
         end)
 
-        run_bench("submit_script_terms (list)", warmup, iterations, fn ->
-          _ = Native.submit_script_terms(script)
-        end)
-
-        run_bench("submit_script_terms2 (list)", warmup, iterations, fn ->
-          _ = Native.submit_script_terms2(script)
-        end)
       end)
     after
       _ = Native.stop()
