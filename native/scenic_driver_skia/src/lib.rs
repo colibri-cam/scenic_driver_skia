@@ -1,5 +1,6 @@
 mod backend;
 mod drm_backend;
+mod drm_input;
 mod input;
 mod input_translate;
 mod raster_backend;
@@ -88,6 +89,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
         let dirty_for_thread = Arc::clone(&dirty);
         let stop_for_thread = Arc::clone(&stop);
         let input_for_thread = Arc::clone(&input_mask);
+        let input_events_for_thread = Arc::clone(&input_events);
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -97,6 +99,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
                     dirty_for_thread,
                     state_for_thread,
                     input_for_thread,
+                    input_events_for_thread,
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;

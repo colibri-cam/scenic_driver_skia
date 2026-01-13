@@ -5,43 +5,69 @@ defmodule ScenicDriverSkia.DemoDrm do
     import Scenic.Primitives
 
     def init(scene, _args, _opts) do
+      :ok =
+        Scenic.Scene.request_input(scene, [
+          :key,
+          :codepoint,
+          :cursor_pos,
+          :cursor_button,
+          :cursor_scroll,
+          :viewport
+        ])
+
       Process.send_after(self(), :change_color, 3_000)
 
-      graph =
-        Scenic.Graph.build()
-        |> rect({200, 120}, fill: :blue, translate: {50, 50})
-        |> text("Skia DRM", fill: :yellow, translate: {60, 90})
-        |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
-        |> digital_clock(
-          format: :hours_12,
-          seconds: true,
-          translate: {50, 200},
-          font: :roboto_mono,
-          font_size: 18,
-          fill: :white
-        )
+      scene =
+        scene
+        |> Scenic.Scene.assign(:rect_fill, :blue)
+        |> Scenic.Scene.assign(:input_text, "input: none")
 
-      scene = Scenic.Scene.push_graph(scene, graph)
+      scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:ok, scene}
     end
 
-    def handle_info(:change_color, scene) do
-      graph =
-        Scenic.Graph.build()
-        |> rect({200, 120}, fill: :red, translate: {50, 50})
-        |> text("Skia DRM", fill: :yellow, translate: {60, 90})
-        |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
-        |> digital_clock(
-          format: :hours_12,
-          seconds: true,
-          translate: {50, 200},
-          font: :roboto_mono,
-          font_size: 18,
-          fill: :white
-        )
+    def handle_input(event, _context, scene) do
+      scene =
+        scene
+        |> Scenic.Scene.assign(:input_text, "input: " <> format_input(event))
+        |> Scenic.Scene.push_graph(build_graph(scene))
 
-      scene = Scenic.Scene.push_graph(scene, graph)
       {:noreply, scene}
+    end
+
+    def handle_info(:change_color, scene) do
+      rect_fill =
+        case scene.assigns.rect_fill do
+          :blue -> :red
+          _ -> :blue
+        end
+
+      scene =
+        scene
+        |> Scenic.Scene.assign(:rect_fill, rect_fill)
+        |> Scenic.Scene.push_graph(build_graph(scene))
+
+      {:noreply, scene}
+    end
+
+    defp build_graph(scene) do
+      Scenic.Graph.build()
+      |> rect({200, 120}, fill: scene.assigns.rect_fill, translate: {50, 50})
+      |> text("Skia DRM", fill: :yellow, translate: {60, 90})
+      |> text(scene.assigns.input_text, fill: :white, translate: {60, 140})
+      |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+      |> digital_clock(
+        format: :hours_12,
+        seconds: true,
+        translate: {50, 200},
+        font: :roboto_mono,
+        font_size: 18,
+        fill: :white
+      )
+    end
+
+    defp format_input(event) do
+      inspect(event, limit: 6, printable_limit: 120)
     end
   end
 
@@ -54,7 +80,7 @@ defmodule ScenicDriverSkia.DemoDrm do
         size: {400, 300},
         default_scene: DemoScene,
         drivers: [
-          [module: ScenicDriverSkia.Driver, name: :skia_driver, backend: :drm]
+          [module: Scenic.Driver.Skia, name: :skia_driver, backend: :drm]
         ]
       )
 

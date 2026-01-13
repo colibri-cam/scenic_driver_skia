@@ -24,6 +24,8 @@ use glutin_egl_sys::egl::types::{EGLConfig, EGLContext, EGLDisplay, EGLSurface, 
 use libloading::Library;
 use skia_safe::gpu::gl::FramebufferInfo;
 
+use crate::drm_input::DrmInput;
+use crate::input::InputQueue;
 use crate::renderer::{RenderState, Renderer};
 
 const EGL_PLATFORM_GBM_KHR: EGLenum = 0x31D7;
@@ -419,8 +421,8 @@ pub fn run(
     dirty: Arc<AtomicBool>,
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
+    input_events: Arc<Mutex<InputQueue>>,
 ) {
-    let _input_mask = input_mask;
     let card = match open_card() {
         Ok(card) => card,
         Err(e) => {
@@ -495,6 +497,7 @@ pub fn run(
 
     let (width, height) = mode.size();
     let dimensions = (width as u32, height as u32);
+    let mut input = DrmInput::new(dimensions, Arc::clone(&input_mask), input_events);
 
     let gbm_device = match GbmDevice::new(card.as_fd()) {
         Ok(device) => device,
@@ -626,6 +629,7 @@ pub fn run(
         if stop.load(Ordering::Relaxed) {
             break;
         }
+        input.poll();
         if dirty.swap(false, Ordering::Relaxed) {
             let updated = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
             renderer.set_text(updated);
