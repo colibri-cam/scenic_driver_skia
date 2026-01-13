@@ -125,8 +125,9 @@ impl DrmInput {
             return;
         }
 
-        let (key, location) =
-            evdev_key_to_scenic(key).unwrap_or((ScenicKey::Unidentified, KeyLocation::Standard));
+        let Some((key, location)) = evdev_key_to_scenic(key) else {
+            return;
+        };
         let mods = modifiers_to_mask(self.modifiers);
         let action = if pressed {
             ACTION_PRESS
