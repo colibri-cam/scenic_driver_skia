@@ -90,7 +90,7 @@ defmodule ScenicDriverSkia.DemoDrm do
       |> text(scene.assigns.cursor_pos_text, fill: :white, translate: {60, 140})
       |> text(scene.assigns.cursor_button_text, fill: :white, translate: {60, 165})
       |> text(scene.assigns.key_text, fill: :white, translate: {60, 190})
-      |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+      |> analog_clock(radius: 50, seconds: true, translate: {800, 160}, theme: :light)
       |> digital_clock(
         format: :hours_12,
         seconds: true,
