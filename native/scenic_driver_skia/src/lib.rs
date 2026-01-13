@@ -646,6 +646,32 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 });
                 rest = tail;
             }
+            0x05 => {
+                if rest.len() < 14 {
+                    return Err("draw_rrect opcode truncated".to_string());
+                }
+                let (flag_bytes, tail) = rest.split_at(2);
+                let flag = u16::from_be_bytes([flag_bytes[0], flag_bytes[1]]);
+                let (w_bytes, tail) = tail.split_at(4);
+                let (h_bytes, tail) = tail.split_at(4);
+                let (r_bytes, tail) = tail.split_at(4);
+                let width = f32::from_bits(u32::from_be_bytes([
+                    w_bytes[0], w_bytes[1], w_bytes[2], w_bytes[3],
+                ]));
+                let height = f32::from_bits(u32::from_be_bytes([
+                    h_bytes[0], h_bytes[1], h_bytes[2], h_bytes[3],
+                ]));
+                let radius = f32::from_bits(u32::from_be_bytes([
+                    r_bytes[0], r_bytes[1], r_bytes[2], r_bytes[3],
+                ]));
+                ops.push(ScriptOp::DrawRRect {
+                    width,
+                    height,
+                    radius,
+                    flag,
+                });
+                rest = tail;
+            }
             0x08 => {
                 if rest.len() < 6 {
                     return Err("draw_circle opcode truncated".to_string());
@@ -916,5 +942,23 @@ mod tests {
         if let Some(handle) = state.take() {
             let _ = handle.thread.join();
         }
+    }
+
+    #[test]
+    fn parse_draw_rrect() {
+        let script: [u8; 16] = [
+            0x00, 0x05, 0x00, 0x03, 0x42, 0x20, 0x00, 0x00, 0x41, 0xA0, 0x00, 0x00, 0x41, 0x20,
+            0x00, 0x00,
+        ];
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert_eq!(
+            ops,
+            vec![ScriptOp::DrawRRect {
+                width: 40.0,
+                height: 20.0,
+                radius: 10.0,
+                flag: 0x03
+            }]
+        );
     }
 }

@@ -4,6 +4,7 @@ defmodule ScenicDriverSkia.DemoWayland do
   defmodule DemoScene do
     use Scenic.Scene
     import Scenic.Clock.Components
+    import Scenic.Components
     import Scenic.Primitives
 
     def init(scene, _args, _opts) do
@@ -24,6 +25,7 @@ defmodule ScenicDriverSkia.DemoWayland do
         |> rect({200, 120}, fill: :blue, translate: {50, 50})
         |> text("Skia Wayland", fill: :yellow, translate: {60, 90})
         |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+        |> button("Click Me", id: :demo_btn, translate: {50, 240}, theme: :primary)
         |> digital_clock(
           format: :hours_12,
           seconds: true,
@@ -51,6 +53,7 @@ defmodule ScenicDriverSkia.DemoWayland do
         |> rect({200, 120}, fill: :red, translate: {50, 50})
         |> text("Skia Wayland", fill: :yellow, translate: {60, 90})
         |> analog_clock(radius: 50, seconds: true, translate: {300, 160}, theme: :light)
+        |> button("Click Me", id: :demo_btn, translate: {50, 240}, theme: :primary)
         |> digital_clock(
           format: :hours_12,
           seconds: true,
@@ -69,6 +72,11 @@ defmodule ScenicDriverSkia.DemoWayland do
 
     def handle_event({:rect_click, pos}, from, scene) do
       Logger.info("demo_wayland handle_event rect_click: from=#{inspect(from)} pos=#{inspect(pos)}")
+      {:halt, scene}
+    end
+
+    def handle_event({:click, :demo_btn}, _from, scene) do
+      Logger.info("demo_wayland handle_event button_click")
       {:halt, scene}
     end
 

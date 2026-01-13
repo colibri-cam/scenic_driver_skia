@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use skia_safe::{
-    Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintStyle, Point, Rect, Surface,
-    Typeface, Vector,
+    Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintStyle, Point, RRect, Rect,
+    Surface, Typeface, Vector,
     gpu::{self, SurfaceOrigin, backend_render_targets, gl::FramebufferInfo},
 };
 
@@ -40,6 +40,12 @@ pub enum ScriptOp {
     DrawRect {
         width: f32,
         height: f32,
+        flag: u16,
+    },
+    DrawRRect {
+        width: f32,
+        height: f32,
+        radius: f32,
         flag: u16,
     },
     DrawText(String),
@@ -310,6 +316,29 @@ fn draw_script(
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
                     canvas.draw_rect(rect, &paint);
+                }
+            }
+            ScriptOp::DrawRRect {
+                width,
+                height,
+                radius,
+                flag,
+            } => {
+                let rect = Rect::from_xywh(0.0, 0.0, *width, *height);
+                let rrect = RRect::new_rect_xy(rect, *radius, *radius);
+                if flag & 0x01 == 0x01 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_color(draw_state.fill_color);
+                    canvas.draw_rrect(rrect, &paint);
+                }
+                if flag & 0x02 == 0x02 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_rrect(rrect, &paint);
                 }
             }
             ScriptOp::DrawText(text) => {
