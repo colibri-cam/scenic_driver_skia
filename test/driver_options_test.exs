@@ -1,17 +1,17 @@
-defmodule ScenicDriverSkia.DriverOptionsTest do
+defmodule Scenic.Driver.Skia.DriverOptionsTest do
   use ExUnit.Case, async: true
 
-  alias ScenicDriverSkia.Driver
+  alias Scenic.Driver.Skia
 
   test "validate_opts applies defaults and normalizes backend" do
-    assert {:ok, opts} = Driver.validate_opts([])
+    assert {:ok, opts} = Skia.validate_opts([])
     assert opts[:backend] == "wayland"
     assert opts[:debug] == false
     assert Keyword.get(opts[:window], :title) == "Scenic Window"
     assert Keyword.get(opts[:window], :resizeable) == false
 
     assert {:ok, opts} =
-             Driver.validate_opts(backend: :drm, debug: true, raster_output: "out.png")
+             Skia.validate_opts(backend: :drm, debug: true, raster_output: "out.png")
 
     assert opts[:backend] == "drm"
     assert opts[:debug] == true
@@ -19,11 +19,11 @@ defmodule ScenicDriverSkia.DriverOptionsTest do
   end
 
   test "validate_opts rejects invalid backend type" do
-    assert {:error, %NimbleOptions.ValidationError{}} = Driver.validate_opts(backend: 123)
+    assert {:error, %NimbleOptions.ValidationError{}} = Skia.validate_opts(backend: 123)
   end
 
   test "validate_opts rejects invalid window options" do
     assert {:error, %NimbleOptions.ValidationError{}} =
-             Driver.validate_opts(window: [resizeable: "nope"])
+             Skia.validate_opts(window: [resizeable: "nope"])
   end
 end

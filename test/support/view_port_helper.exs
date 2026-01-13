@@ -1,4 +1,4 @@
-defmodule ScenicDriverSkia.TestSupport.ViewPort do
+defmodule Scenic.Driver.Skia.TestSupport.ViewPort do
   alias Scenic.ViewPort
 
   defmodule DefaultScene do
@@ -17,7 +17,7 @@ defmodule ScenicDriverSkia.TestSupport.ViewPort do
 
     drivers =
       Keyword.get(opts, :drivers, [
-        [module: ScenicDriverSkia.Driver, name: :skia_driver, backend: :raster]
+        [module: Scenic.Driver.Skia, name: :skia_driver, backend: :raster]
       ])
 
     size = Keyword.get(opts, :size, {200, 120})
@@ -44,7 +44,7 @@ defmodule ScenicDriverSkia.TestSupport.ViewPort do
   end
 
   defp ensure_renderer_stopped do
-    case ScenicDriverSkia.Native.stop() do
+    case Scenic.Driver.Skia.Native.stop() do
       :ok -> :ok
       {:ok, _} -> :ok
       {:error, "renderer not running"} -> :ok

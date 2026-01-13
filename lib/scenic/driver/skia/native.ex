@@ -1,4 +1,4 @@
-defmodule ScenicDriverSkia.Native do
+defmodule Scenic.Driver.Skia.Native do
   use Rustler, otp_app: :scenic_driver_skia, crate: "scenic_driver_skia"
 
   @doc false
@@ -33,4 +33,13 @@ defmodule ScenicDriverSkia.Native do
 
   @doc false
   def script_count, do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def set_input_mask(_mask), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def drain_input_events, do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def set_input_target(_pid), do: :erlang.nif_error(:nif_not_loaded)
 end

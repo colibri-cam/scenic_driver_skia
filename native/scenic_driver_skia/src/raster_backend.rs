@@ -1,6 +1,6 @@
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
 };
 use std::time::Duration;
 
@@ -28,7 +28,9 @@ pub fn run(
     render_state: Arc<Mutex<RenderState>>,
     output_path: Arc<Mutex<Option<String>>>,
     text: Arc<Mutex<String>>,
+    input_mask: Arc<AtomicU32>,
 ) {
+    let _input_mask = input_mask;
     let width = 800;
     let height = 600;
 

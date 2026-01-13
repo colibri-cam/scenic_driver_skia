@@ -1,11 +1,11 @@
-defmodule ScenicDriverSkia.DriverLifecycleTest do
+defmodule Scenic.Driver.Skia.DriverLifecycleTest do
   use ExUnit.Case, async: false
 
   import Scenic.Primitives
 
   alias Scenic.Graph
   alias Scenic.ViewPort
-  alias ScenicDriverSkia.TestSupport.ViewPort, as: ViewPortHelper
+  alias Scenic.Driver.Skia.TestSupport.ViewPort, as: ViewPortHelper
 
   test "applies script updates and stops cleanly" do
     vp = ViewPortHelper.start()

@@ -3,7 +3,7 @@ use std::{
     num::NonZeroU32,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         mpsc::Sender,
     },
 };
@@ -21,12 +21,23 @@ use skia_safe::gpu::gl::FramebufferInfo;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{ElementState, MouseScrollDelta, WindowEvent},
     event_loop::{EventLoop, EventLoopProxy},
+    keyboard::{Key, KeyLocation, ModifiersState, NamedKey},
     platform::wayland::EventLoopBuilderExtWayland,
     window::{Window, WindowAttributes},
 };
 
+use crate::input::{
+    ACTION_PRESS, ACTION_RELEASE, INPUT_MASK_CODEPOINT, INPUT_MASK_CURSOR_BUTTON,
+    INPUT_MASK_CURSOR_POS, INPUT_MASK_CURSOR_SCROLL, INPUT_MASK_KEY, INPUT_MASK_VIEWPORT,
+    InputEvent, InputQueue, notify_input_ready,
+};
+use crate::input_translate::{
+    Key as ScenicKey, KeyLocation as ScenicKeyLocation, Modifiers as ScenicModifiers,
+    MouseButton as ScenicMouseButton, NamedKey as ScenicNamedKey, button_to_scenic, key_to_scenic,
+    modifiers_to_mask,
+};
 use crate::renderer::{RenderState, Renderer};
 
 #[derive(Debug)]
@@ -50,6 +61,10 @@ struct App {
     running_flag: Arc<AtomicBool>,
     current_text: String,
     render_state: Arc<Mutex<RenderState>>,
+    input_mask: Arc<AtomicU32>,
+    input_events: Arc<Mutex<InputQueue>>,
+    cursor_pos: (f32, f32),
+    modifiers: ModifiersState,
 }
 
 impl App {
@@ -94,6 +109,18 @@ impl App {
         self.running_flag.store(running, Ordering::Relaxed);
         if running && let Some(env) = self.env.as_ref() {
             env.window.request_redraw();
+        }
+    }
+
+    fn push_input(&self, event: InputEvent) {
+        let notify = if let Ok(mut queue) = self.input_events.lock() {
+            queue.push_event(event)
+        } else {
+            None
+        };
+
+        if let Some(pid) = notify {
+            notify_input_ready(pid);
         }
     }
 }
@@ -346,6 +373,119 @@ impl ApplicationHandler<UserEvent> for App {
         event: WindowEvent,
     ) {
         match event {
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers.state();
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                if mask & INPUT_MASK_KEY != 0 {
+                    let action = match event.state {
+                        ElementState::Pressed => ACTION_PRESS,
+                        ElementState::Released => ACTION_RELEASE,
+                    };
+                    let key = key_to_scenic(
+                        map_key(&event.logical_key),
+                        map_key_location(event.location),
+                    );
+                    let mods = modifiers_to_mask(map_modifiers(self.modifiers));
+                    self.push_input(InputEvent::Key { key, action, mods });
+                }
+
+                if mask & INPUT_MASK_CODEPOINT != 0
+                    && matches!(event.state, ElementState::Pressed)
+                    && let Some(text) = event.text.as_ref()
+                {
+                    let mods = modifiers_to_mask(map_modifiers(self.modifiers));
+                    for ch in text.chars() {
+                        self.push_input(InputEvent::Codepoint {
+                            codepoint: ch,
+                            mods,
+                        });
+                    }
+                }
+            }
+
+            WindowEvent::Ime(ime) => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                if mask & INPUT_MASK_CODEPOINT != 0
+                    && let winit::event::Ime::Commit(text) = ime
+                {
+                    let mods = modifiers_to_mask(map_modifiers(self.modifiers));
+                    for ch in text.chars() {
+                        self.push_input(InputEvent::Codepoint {
+                            codepoint: ch,
+                            mods,
+                        });
+                    }
+                }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                let x = position.x as f32;
+                let y = position.y as f32;
+                self.cursor_pos = (x, y);
+                if mask & INPUT_MASK_CURSOR_POS != 0 {
+                    self.push_input(InputEvent::CursorPos { x, y });
+                }
+            }
+
+            WindowEvent::CursorEntered { .. } => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                if mask & INPUT_MASK_VIEWPORT != 0 {
+                    let (x, y) = self.cursor_pos;
+                    self.push_input(InputEvent::Viewport {
+                        entered: true,
+                        x,
+                        y,
+                    });
+                }
+            }
+
+            WindowEvent::CursorLeft { .. } => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                if mask & INPUT_MASK_VIEWPORT != 0 {
+                    let (x, y) = self.cursor_pos;
+                    self.push_input(InputEvent::Viewport {
+                        entered: false,
+                        x,
+                        y,
+                    });
+                }
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                if mask & INPUT_MASK_CURSOR_BUTTON != 0 {
+                    let action = match state {
+                        ElementState::Pressed => ACTION_PRESS,
+                        ElementState::Released => ACTION_RELEASE,
+                    };
+                    let button = button_to_scenic(map_mouse_button(button));
+                    let mods = modifiers_to_mask(map_modifiers(self.modifiers));
+                    let (x, y) = self.cursor_pos;
+                    self.push_input(InputEvent::CursorButton {
+                        button,
+                        action,
+                        mods,
+                        x,
+                        y,
+                    });
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                let mask = self.input_mask.load(Ordering::Relaxed);
+                if mask & INPUT_MASK_CURSOR_SCROLL != 0 {
+                    let (dx, dy) = match delta {
+                        MouseScrollDelta::LineDelta(x, y) => (x, y),
+                        MouseScrollDelta::PixelDelta(pos) => (pos.x as f32, pos.y as f32),
+                    };
+                    let (x, y) = self.cursor_pos;
+                    self.push_input(InputEvent::CursorScroll { dx, dy, x, y });
+                }
+            }
+
             WindowEvent::CloseRequested => self.set_running(_event_loop, false),
 
             WindowEvent::Resized(physical_size) => {
@@ -402,6 +542,8 @@ pub fn run(
     initial_text: String,
     running_flag: Arc<AtomicBool>,
     render_state: Arc<Mutex<RenderState>>,
+    input_mask: Arc<AtomicU32>,
+    input_events: Arc<Mutex<InputQueue>>,
 ) {
     let mut el_builder = EventLoop::<UserEvent>::with_user_event();
     EventLoopBuilderExtWayland::with_any_thread(&mut el_builder, true);
@@ -424,7 +566,112 @@ pub fn run(
         running_flag,
         current_text: initial_text,
         render_state,
+        input_mask,
+        input_events,
+        cursor_pos: (0.0, 0.0),
+        modifiers: ModifiersState::empty(),
     };
     app.redraw();
     el.run_app(&mut app).expect("run_app failed");
+}
+
+fn map_modifiers(mods: ModifiersState) -> ScenicModifiers {
+    ScenicModifiers {
+        shift: mods.shift_key(),
+        ctrl: mods.control_key(),
+        alt: mods.alt_key(),
+        meta: mods.super_key(),
+    }
+}
+
+fn map_key_location(location: KeyLocation) -> ScenicKeyLocation {
+    match location {
+        KeyLocation::Left => ScenicKeyLocation::Left,
+        KeyLocation::Right => ScenicKeyLocation::Right,
+        KeyLocation::Numpad => ScenicKeyLocation::Numpad,
+        KeyLocation::Standard => ScenicKeyLocation::Standard,
+    }
+}
+
+fn map_key(key: &Key) -> ScenicKey {
+    match key {
+        Key::Character(text) => text
+            .chars()
+            .next()
+            .map(ScenicKey::Character)
+            .unwrap_or(ScenicKey::Unidentified),
+        Key::Named(named) => map_named_key(*named)
+            .map(ScenicKey::Named)
+            .unwrap_or(ScenicKey::Unidentified),
+        Key::Unidentified(_) | Key::Dead(_) => ScenicKey::Unidentified,
+    }
+}
+
+fn map_named_key(named: NamedKey) -> Option<ScenicNamedKey> {
+    Some(match named {
+        NamedKey::Enter => ScenicNamedKey::Enter,
+        NamedKey::Tab => ScenicNamedKey::Tab,
+        NamedKey::Space => ScenicNamedKey::Space,
+        NamedKey::Escape => ScenicNamedKey::Escape,
+        NamedKey::Backspace => ScenicNamedKey::Backspace,
+        NamedKey::Insert => ScenicNamedKey::Insert,
+        NamedKey::Delete => ScenicNamedKey::Delete,
+        NamedKey::ArrowLeft => ScenicNamedKey::ArrowLeft,
+        NamedKey::ArrowRight => ScenicNamedKey::ArrowRight,
+        NamedKey::ArrowUp => ScenicNamedKey::ArrowUp,
+        NamedKey::ArrowDown => ScenicNamedKey::ArrowDown,
+        NamedKey::PageUp => ScenicNamedKey::PageUp,
+        NamedKey::PageDown => ScenicNamedKey::PageDown,
+        NamedKey::Home => ScenicNamedKey::Home,
+        NamedKey::End => ScenicNamedKey::End,
+        NamedKey::CapsLock => ScenicNamedKey::CapsLock,
+        NamedKey::ScrollLock => ScenicNamedKey::ScrollLock,
+        NamedKey::NumLock => ScenicNamedKey::NumLock,
+        NamedKey::PrintScreen => ScenicNamedKey::PrintScreen,
+        NamedKey::Pause => ScenicNamedKey::Pause,
+        NamedKey::ContextMenu => ScenicNamedKey::ContextMenu,
+        NamedKey::Shift => ScenicNamedKey::Shift,
+        NamedKey::Control => ScenicNamedKey::Control,
+        NamedKey::Alt => ScenicNamedKey::Alt,
+        NamedKey::AltGraph => ScenicNamedKey::AltGraph,
+        NamedKey::Super => ScenicNamedKey::Super,
+        NamedKey::Meta => ScenicNamedKey::Meta,
+        NamedKey::Hyper => ScenicNamedKey::Hyper,
+        NamedKey::F1 => ScenicNamedKey::F1,
+        NamedKey::F2 => ScenicNamedKey::F2,
+        NamedKey::F3 => ScenicNamedKey::F3,
+        NamedKey::F4 => ScenicNamedKey::F4,
+        NamedKey::F5 => ScenicNamedKey::F5,
+        NamedKey::F6 => ScenicNamedKey::F6,
+        NamedKey::F7 => ScenicNamedKey::F7,
+        NamedKey::F8 => ScenicNamedKey::F8,
+        NamedKey::F9 => ScenicNamedKey::F9,
+        NamedKey::F10 => ScenicNamedKey::F10,
+        NamedKey::F11 => ScenicNamedKey::F11,
+        NamedKey::F12 => ScenicNamedKey::F12,
+        NamedKey::F13 => ScenicNamedKey::F13,
+        NamedKey::F14 => ScenicNamedKey::F14,
+        NamedKey::F15 => ScenicNamedKey::F15,
+        NamedKey::F16 => ScenicNamedKey::F16,
+        NamedKey::F17 => ScenicNamedKey::F17,
+        NamedKey::F18 => ScenicNamedKey::F18,
+        NamedKey::F19 => ScenicNamedKey::F19,
+        NamedKey::F20 => ScenicNamedKey::F20,
+        NamedKey::F21 => ScenicNamedKey::F21,
+        NamedKey::F22 => ScenicNamedKey::F22,
+        NamedKey::F23 => ScenicNamedKey::F23,
+        NamedKey::F24 => ScenicNamedKey::F24,
+        _ => return None,
+    })
+}
+
+fn map_mouse_button(button: winit::event::MouseButton) -> ScenicMouseButton {
+    match button {
+        winit::event::MouseButton::Left => ScenicMouseButton::Left,
+        winit::event::MouseButton::Right => ScenicMouseButton::Right,
+        winit::event::MouseButton::Middle => ScenicMouseButton::Middle,
+        winit::event::MouseButton::Back => ScenicMouseButton::Back,
+        winit::event::MouseButton::Forward => ScenicMouseButton::Forward,
+        winit::event::MouseButton::Other(_) => ScenicMouseButton::Other,
+    }
 }

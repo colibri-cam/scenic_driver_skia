@@ -1,4 +1,4 @@
-defmodule ScenicDriverSkia.Assets do
+defmodule Scenic.Driver.Skia.Assets do
   use Scenic.Assets.Static,
     otp_app: :scenic_driver_skia,
     sources: ["assets", {:scenic, "assets"}],

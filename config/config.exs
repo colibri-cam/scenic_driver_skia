@@ -1,3 +1,3 @@
 import Config
 
-config :scenic, :assets, module: ScenicDriverSkia.Assets
+config :scenic, :assets, module: Scenic.Driver.Skia.Assets

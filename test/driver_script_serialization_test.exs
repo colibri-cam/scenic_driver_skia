@@ -1,4 +1,4 @@
-defmodule ScenicDriverSkia.DriverScriptSerializationTest do
+defmodule Scenic.Driver.Skia.DriverScriptSerializationTest do
   use ExUnit.Case, async: true
 
   import Scenic.Primitives

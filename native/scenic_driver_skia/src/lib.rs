@@ -1,18 +1,21 @@
 mod backend;
 mod drm_backend;
+mod input;
+mod input_translate;
 mod raster_backend;
 mod renderer;
 
 use std::collections::HashMap;
 use std::sync::{
     Arc, Mutex, OnceLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
     mpsc,
 };
 use std::thread;
 use std::time::Duration;
 
 use backend::UserEvent;
+use input::{InputEvent, InputQueue, notify_input_ready};
 use renderer::{RenderState, ScriptOp};
 
 enum StopSignal {
@@ -25,6 +28,8 @@ struct DriverHandle {
     stop: StopSignal,
     text: Arc<Mutex<String>>,
     render_state: Arc<Mutex<RenderState>>,
+    input_events: Arc<Mutex<InputQueue>>,
+    input_mask: Arc<AtomicU32>,
     raster_output: Option<Arc<Mutex<Option<String>>>>,
     dirty: Option<Arc<AtomicBool>>,
     running: Arc<AtomicBool>,
@@ -72,6 +77,8 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
     let thread_name = format!("scenic-driver-{backend}");
     let text = Arc::new(Mutex::new(String::from("Hello, Wayland")));
     let render_state = Arc::new(Mutex::new(RenderState::default()));
+    let input_events = Arc::new(Mutex::new(InputQueue::new()));
+    let input_mask = Arc::new(AtomicU32::new(0));
     let running = Arc::new(AtomicBool::new(true));
     let handle = if backend == "drm" {
         let stop = Arc::new(AtomicBool::new(false));
@@ -80,6 +87,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
         let state_for_thread = Arc::clone(&render_state);
         let dirty_for_thread = Arc::clone(&dirty);
         let stop_for_thread = Arc::clone(&stop);
+        let input_for_thread = Arc::clone(&input_mask);
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -88,6 +96,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
                     text_for_thread,
                     dirty_for_thread,
                     state_for_thread,
+                    input_for_thread,
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
@@ -95,6 +104,8 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
             stop: StopSignal::Drm(stop),
             text,
             render_state,
+            input_events,
+            input_mask,
             raster_output: None,
             dirty: Some(dirty),
             running,
@@ -109,6 +120,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
         let text_for_thread = Arc::clone(&text);
         let raster_output = Arc::new(Mutex::new(None));
         let output_for_thread = Arc::clone(&raster_output);
+        let input_for_thread = Arc::clone(&input_mask);
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -118,6 +130,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
                     state_for_thread,
                     output_for_thread,
                     text_for_thread,
+                    input_for_thread,
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
@@ -125,6 +138,8 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
             stop: StopSignal::Raster(stop),
             text,
             render_state,
+            input_events,
+            input_mask,
             raster_output: Some(raster_output),
             dirty: Some(dirty),
             running,
@@ -138,10 +153,19 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
             .clone();
         let running_for_thread = Arc::clone(&running);
         let state_for_thread = Arc::clone(&render_state);
+        let input_for_thread = Arc::clone(&input_mask);
+        let input_events_for_thread = Arc::clone(&input_events);
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
-                backend::run(proxy_tx, initial_text, running_for_thread, state_for_thread)
+                backend::run(
+                    proxy_tx,
+                    initial_text,
+                    running_for_thread,
+                    state_for_thread,
+                    input_for_thread,
+                    input_events_for_thread,
+                )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
         let proxy = proxy_rx
@@ -151,6 +175,8 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
             stop: StopSignal::Wayland(proxy),
             text,
             render_state,
+            input_events,
+            input_mask,
             raster_output: None,
             dirty: None,
             running,
@@ -333,6 +359,57 @@ pub fn set_raster_output(path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn set_input_mask(mask: u32) -> Result<(), String> {
+    let state = driver_state()
+        .lock()
+        .map_err(|_| "driver state lock poisoned".to_string())?;
+    let handle = state
+        .as_ref()
+        .ok_or_else(|| "renderer not running".to_string())?;
+
+    handle.input_mask.store(mask, Ordering::Relaxed);
+
+    Ok(())
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn set_input_target(pid: Option<rustler::LocalPid>) -> Result<(), String> {
+    let state = driver_state()
+        .lock()
+        .map_err(|_| "driver state lock poisoned".to_string())?;
+    let handle = state
+        .as_ref()
+        .ok_or_else(|| "renderer not running".to_string())?;
+    let mut queue = handle
+        .input_events
+        .lock()
+        .map_err(|_| "input queue lock poisoned".to_string())?;
+    let notify = queue.set_target(pid);
+    drop(queue);
+
+    if let Some(pid) = notify {
+        notify_input_ready(pid);
+    }
+
+    Ok(())
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn drain_input_events() -> Result<Vec<InputEvent>, String> {
+    let state = driver_state()
+        .lock()
+        .map_err(|_| "driver state lock poisoned".to_string())?;
+    let handle = state
+        .as_ref()
+        .ok_or_else(|| "renderer not running".to_string())?;
+    let mut queue = handle
+        .input_events
+        .lock()
+        .map_err(|_| "input queue lock poisoned".to_string())?;
+    Ok(queue.drain())
 }
 
 fn update_render_state<F>(mut update: F) -> Result<(), String>
@@ -682,11 +759,12 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
     Ok(ops)
 }
 
-rustler::init!("Elixir.ScenicDriverSkia.Native");
+rustler::init!("Elixir.Scenic.Driver.Skia.Native");
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::{InputEvent, InputQueue};
 
     #[test]
     fn parse_fill_and_rect() {
@@ -800,5 +878,43 @@ mod tests {
                 flag: 0x03
             }]
         );
+    }
+
+    #[test]
+    fn drain_input_events_returns_queued_events() {
+        let mut state = driver_state().lock().expect("driver state lock");
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread = thread::spawn(|| {});
+        let mut queue = InputQueue::new();
+        queue.push_event(InputEvent::CursorPos { x: 1.0, y: 2.0 });
+        queue.push_event(InputEvent::Key {
+            key: "key_a".to_string(),
+            action: 1,
+            mods: 0,
+        });
+        let input_events = Arc::new(Mutex::new(queue));
+
+        *state = Some(DriverHandle {
+            stop: StopSignal::Raster(Arc::clone(&stop)),
+            text: Arc::new(Mutex::new(String::new())),
+            render_state: Arc::new(Mutex::new(RenderState::default())),
+            input_events: Arc::clone(&input_events),
+            input_mask: Arc::new(AtomicU32::new(0)),
+            raster_output: None,
+            dirty: Some(Arc::new(AtomicBool::new(false))),
+            running: Arc::new(AtomicBool::new(false)),
+            thread,
+        });
+
+        drop(state);
+        let drained = drain_input_events().expect("drain_input_events failed");
+        assert_eq!(drained.len(), 2);
+        assert!(matches!(drained[0], InputEvent::CursorPos { .. }));
+        assert!(matches!(drained[1], InputEvent::Key { .. }));
+
+        let mut state = driver_state().lock().expect("driver state lock");
+        if let Some(handle) = state.take() {
+            let _ = handle.thread.join();
+        }
     }
 }

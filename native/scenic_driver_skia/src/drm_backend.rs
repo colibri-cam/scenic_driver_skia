@@ -6,7 +6,7 @@ use std::os::raw::c_void;
 use std::ptr;
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
 };
 use std::time::Duration;
 
@@ -418,7 +418,9 @@ pub fn run(
     text: Arc<Mutex<String>>,
     dirty: Arc<AtomicBool>,
     render_state: Arc<Mutex<RenderState>>,
+    input_mask: Arc<AtomicU32>,
 ) {
+    let _input_mask = input_mask;
     let card = match open_card() {
         Ok(card) => card,
         Err(e) => {
