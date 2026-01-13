@@ -399,6 +399,10 @@ pub fn set_input_target(pid: Option<rustler::LocalPid>) -> Result<(), String> {
 
 #[rustler::nif(schedule = "DirtyIo")]
 pub fn drain_input_events() -> Result<Vec<InputEvent>, String> {
+    drain_input_events_inner()
+}
+
+fn drain_input_events_inner() -> Result<Vec<InputEvent>, String> {
     let state = driver_state()
         .lock()
         .map_err(|_| "driver state lock poisoned".to_string())?;
@@ -918,6 +922,10 @@ mod tests {
             action: 1,
             mods: 0,
         });
+        queue.push_event(InputEvent::ViewportReshape {
+            width: 1280,
+            height: 720,
+        });
         let input_events = Arc::new(Mutex::new(queue));
 
         *state = Some(DriverHandle {
@@ -933,10 +941,11 @@ mod tests {
         });
 
         drop(state);
-        let drained = drain_input_events().expect("drain_input_events failed");
-        assert_eq!(drained.len(), 2);
+        let drained = drain_input_events_inner().expect("drain_input_events failed");
+        assert_eq!(drained.len(), 3);
         assert!(matches!(drained[0], InputEvent::CursorPos { .. }));
         assert!(matches!(drained[1], InputEvent::Key { .. }));
+        assert!(matches!(drained[2], InputEvent::ViewportReshape { .. }));
 
         let mut state = driver_state().lock().expect("driver state lock");
         if let Some(handle) = state.take() {

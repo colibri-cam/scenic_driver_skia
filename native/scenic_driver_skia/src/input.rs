@@ -35,6 +35,10 @@ pub enum InputEvent {
         x: f32,
         y: f32,
     },
+    ViewportReshape {
+        width: u32,
+        height: u32,
+    },
 }
 
 pub const INPUT_MASK_KEY: u32 = 0x01;
@@ -61,6 +65,7 @@ rustler::atoms! {
     viewport,
     enter,
     exit,
+    reshape,
     shift,
     ctrl,
     alt,
@@ -175,6 +180,9 @@ impl Encoder for InputEvent {
             InputEvent::Viewport { entered, x, y } => {
                 let dir = if *entered { enter() } else { exit() };
                 (viewport(), (dir, (*x, *y))).encode(env)
+            }
+            InputEvent::ViewportReshape { width, height } => {
+                (viewport(), (reshape(), (*width, *height))).encode(env)
             }
         }
     }

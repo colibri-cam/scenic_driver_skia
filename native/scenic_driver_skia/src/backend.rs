@@ -64,6 +64,7 @@ struct App {
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
     cursor_pos: (f32, f32),
+    window_size: (u32, u32),
     modifiers: ModifiersState,
 }
 
@@ -87,8 +88,10 @@ impl App {
                     self.current_text.clone(),
                 ) {
                     Ok((env, renderer)) => {
+                        let size = env.window.inner_size();
                         self.env = Some(env);
                         self.renderer = Some(renderer);
+                        self.window_size = (size.width, size.height);
                     }
                     Err(err) => {
                         eprintln!("Failed to initialize renderer: {err}");
@@ -493,6 +496,16 @@ impl ApplicationHandler<UserEvent> for App {
                     return;
                 }
                 let (w, h): (u32, u32) = physical_size.into();
+                if (w, h) != self.window_size {
+                    self.window_size = (w, h);
+                    let mask = self.input_mask.load(Ordering::Relaxed);
+                    if mask & INPUT_MASK_VIEWPORT != 0 {
+                        self.push_input(InputEvent::ViewportReshape {
+                            width: w,
+                            height: h,
+                        });
+                    }
+                }
                 if let (Some(env), Some(renderer)) = (self.env.as_mut(), self.renderer.as_mut()) {
                     env.gl_surface.resize(
                         &env.gl_context,
@@ -500,7 +513,7 @@ impl ApplicationHandler<UserEvent> for App {
                         NonZeroU32::new(h.max(1)).unwrap(),
                     );
 
-                    renderer.resize((w, h));
+                    renderer.resize((w.max(1), h.max(1)));
                     env.window.request_redraw();
                 }
             }
@@ -558,6 +571,7 @@ pub fn run(
             return;
         }
     };
+    let size = env.window.inner_size();
 
     let mut app = App {
         env: Some(env),
@@ -569,6 +583,7 @@ pub fn run(
         input_mask,
         input_events,
         cursor_pos: (0.0, 0.0),
+        window_size: (size.width, size.height),
         modifiers: ModifiersState::empty(),
     };
     app.redraw();

@@ -42,6 +42,11 @@ defmodule ScenicDriverSkia.DemoWayland do
       {:ok, scene}
     end
 
+    def handle_input({:viewport, {:reshape, {width, height}}}, _context, scene) do
+      Logger.info("demo_wayland handle_input viewport reshape: #{width}x#{height}")
+      {:noreply, scene}
+    end
+
     def handle_input(event, _context, scene) do
       maybe_send_rect_event(event, scene)
       {:noreply, scene}
