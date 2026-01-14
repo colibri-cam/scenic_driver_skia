@@ -111,6 +111,23 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule EllipseScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> ellipse({8, 6},
+          fill: :red,
+          stroke: {2, :white},
+          translate: {20, 20}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   test "draw_rect fills expected pixels" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -316,6 +333,39 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 15, 15) == {255, 0, 0}
   end
 
+  test "draw_ellipse fills expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: EllipseScene)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop()
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(40, fn {w, _h, data} ->
+        red_pixel?(pixel_at(data, w, 20, 20)) and
+          pixel_at(data, w, 28, 20) != {0, 0, 0}
+      end)
+
+    # Background just outside the translated ellipse bounds.
+    assert pixel_at(frame, width, 10, 20) == {0, 0, 0}
+    assert pixel_at(frame, width, 20, 12) == {0, 0, 0}
+    assert pixel_at(frame, width, 30, 20) == {0, 0, 0}
+    assert pixel_at(frame, width, 20, 28) == {0, 0, 0}
+    # Stroke samples on the left, right, top, and bottom edges.
+    assert pixel_at(frame, width, 12, 20) != {0, 0, 0}
+    assert pixel_at(frame, width, 28, 20) != {0, 0, 0}
+    assert pixel_at(frame, width, 20, 14) != {0, 0, 0}
+    assert pixel_at(frame, width, 20, 26) != {0, 0, 0}
+    # Fill sample inside the ellipse.
+    assert red_pixel?(pixel_at(frame, width, 20, 20))
+  end
+
   defp wait_for_frame!(attempts_remaining, predicate) do
     case Native.get_raster_frame() do
       {:ok, {width, height, frame}} = ok ->
@@ -346,5 +396,9 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
       <<_::binary-size(offset), r, g, b, _::binary>> -> {r, g, b}
       _ -> {0, 0, 0}
     end
+  end
+
+  defp red_pixel?({r, g, b}) do
+    r > 200 and g < 80 and b < 80
   end
 end
