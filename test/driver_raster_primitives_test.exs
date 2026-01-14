@@ -12,7 +12,11 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     def init(scene, _args, _opts) do
       graph =
         Scenic.Graph.build()
-        |> rect({20, 20}, fill: :red, translate: {0, 0})
+        |> rect({20, 20},
+          fill: :red,
+          stroke: {4, :white},
+          translate: {10, 10}
+        )
 
       {:ok, Scenic.Scene.push_graph(scene, graph)}
     end
@@ -33,11 +37,21 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
 
     {width, _height, frame} =
       wait_for_frame!(40, fn {w, _h, data} ->
-        pixel_at(data, w, 5, 5) == {255, 0, 0}
+        pixel_at(data, w, 20, 20) == {255, 0, 0} and
+          pixel_at(data, w, 15, 10) == {255, 255, 255}
       end)
 
-    assert pixel_at(frame, width, 5, 5) == {255, 0, 0}
-    assert pixel_at(frame, width, 30, 30) == {0, 0, 0}
+    assert pixel_at(frame, width, 7, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 7) == {0, 0, 0}
+    assert pixel_at(frame, width, 7, 7) == {0, 0, 0}
+    assert pixel_at(frame, width, 33, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 33) == {0, 0, 0}
+    assert pixel_at(frame, width, 33, 33) == {0, 0, 0}
+    assert pixel_at(frame, width, 15, 10) == {255, 255, 255}
+    assert pixel_at(frame, width, 10, 15) == {255, 255, 255}
+    assert pixel_at(frame, width, 30, 15) == {255, 255, 255}
+    assert pixel_at(frame, width, 15, 30) == {255, 255, 255}
+    assert pixel_at(frame, width, 20, 20) == {255, 0, 0}
   end
 
   defp wait_for_frame!(attempts_remaining, predicate) do
