@@ -23,6 +23,8 @@ struct InputDevice {
     device: Device,
     abs_x: Option<AbsAxisState>,
     abs_y: Option<AbsAxisState>,
+    abs_x_dirty: bool,
+    abs_y_dirty: bool,
     abs_mode: AbsMode,
     last_abs_scaled: Option<(f32, f32)>,
     touch_active: bool,
@@ -286,6 +288,8 @@ fn enumerate_devices() -> Vec<InputDevice> {
             device,
             abs_x,
             abs_y,
+            abs_x_dirty: false,
+            abs_y_dirty: false,
             abs_mode,
             last_abs_scaled: None,
             touch_active: false,
@@ -322,11 +326,17 @@ fn update_abs_action(
     match axis {
         AbsoluteAxisType::ABS_X => {
             device.abs_x = Some(update_axis_state(device.abs_x, value, fallback.0));
+            device.abs_x_dirty = true;
         }
         AbsoluteAxisType::ABS_Y => {
             device.abs_y = Some(update_axis_state(device.abs_y, value, fallback.1));
+            device.abs_y_dirty = true;
         }
         _ => return AbsAction::None,
+    }
+
+    if !(device.abs_x_dirty && device.abs_y_dirty) {
+        return AbsAction::None;
     }
 
     let (abs_x, abs_y) = match (device.abs_x, device.abs_y) {
@@ -338,6 +348,8 @@ fn update_abs_action(
         scale_abs_value(abs_x, screen_size.0),
         scale_abs_value(abs_y, screen_size.1),
     );
+    device.abs_x_dirty = false;
+    device.abs_y_dirty = false;
 
     if device.abs_mode == AbsMode::RelativeFromAbs {
         if device.touch_tracking && !device.touch_active {
@@ -852,6 +864,8 @@ mod tests {
             device,
             abs_x,
             abs_y,
+            abs_x_dirty: false,
+            abs_y_dirty: false,
             abs_mode: AbsMode::Absolute,
             last_abs_scaled: None,
             touch_active: false,
