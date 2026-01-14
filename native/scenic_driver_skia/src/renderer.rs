@@ -33,6 +33,15 @@ pub enum ScriptOp {
         y1: f32,
         flag: u16,
     },
+    DrawTriangle {
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        flag: u16,
+    },
     DrawCircle {
         radius: f32,
         flag: u16,
@@ -302,6 +311,38 @@ fn draw_script(
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
                     canvas.draw_line(Point::new(*x0, *y0), Point::new(*x1, *y1), &paint);
+                }
+            }
+            ScriptOp::DrawTriangle {
+                x0,
+                y0,
+                x1,
+                y1,
+                x2,
+                y2,
+                flag,
+            } => {
+                let mut builder = PathBuilder::new();
+                builder
+                    .move_to(Point::new(*x0, *y0))
+                    .line_to(Point::new(*x1, *y1))
+                    .line_to(Point::new(*x2, *y2))
+                    .close();
+                let path = builder.detach();
+                if flag & 0x01 == 0x01 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Fill);
+                    paint.set_color(draw_state.fill_color);
+                    canvas.draw_path(&path, &paint);
+                }
+                if flag & 0x02 == 0x02 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_path(&path, &paint);
                 }
             }
             ScriptOp::DrawCircle { radius, flag } => {
