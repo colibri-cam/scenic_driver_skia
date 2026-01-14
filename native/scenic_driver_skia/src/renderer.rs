@@ -42,6 +42,11 @@ pub enum ScriptOp {
         radius1: f32,
         flag: u16,
     },
+    DrawArc {
+        radius: f32,
+        radians: f32,
+        flag: u16,
+    },
     DrawRect {
         width: f32,
         height: f32,
@@ -320,6 +325,29 @@ fn draw_script(
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
                     canvas.draw_oval(rect, &paint);
+                }
+            }
+            ScriptOp::DrawArc {
+                radius,
+                radians,
+                flag,
+            } => {
+                let rect = Rect::from_xywh(-radius, -radius, radius * 2.0, radius * 2.0);
+                let start = 0.0;
+                let sweep = radians.to_degrees();
+                if flag & 0x01 == 0x01 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_color(draw_state.fill_color);
+                    canvas.draw_arc(rect, start, sweep, false, &paint);
+                }
+                if flag & 0x02 == 0x02 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_arc(rect, start, sweep, false, &paint);
                 }
             }
             ScriptOp::DrawRect {
