@@ -31,6 +31,8 @@ Completed:
 7. **DRM initial mode selection**
    - Pick closest connector mode to viewport size.
    - Emit viewport reshape input if mode differs from requested size.
+8. **Viewport window options (Wayland)**
+   - Use `window` options for initial title/resizeable configuration.
 
 ## Next
 1. **DRM input integration**
@@ -42,8 +44,8 @@ Completed:
 3. **Window resize flow (DRM, if needed)**
    - Confirm whether DRM needs explicit resize handling beyond initial modeset (hotplug).
 4. **Viewport options wiring**
-   - Wire `window` options (title, resizeable) to backend initialization.
    - Use viewport size for initial window sizing (fallback to defaults).
+   - Wire DRM/Raster window-related options if needed.
 5. **Script opcode parity (rendering coverage)**
    - **Paths & geometry**: add path primitives (move/line/curve/close), rounded rects, ellipses, arcs.
    - **Paint features**: gradients, image patterns, alpha/opacity, blend modes, stroke caps/joins/dashes.

@@ -168,8 +168,6 @@ pub fn start(
         let input_for_thread = Arc::clone(&input_mask);
         let input_events_for_thread = Arc::clone(&input_events);
         let requested_size = viewport_size;
-        let window_title = window_title.clone();
-        let window_resizeable = window_resizeable;
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -180,9 +178,11 @@ pub fn start(
                     state_for_thread,
                     input_for_thread,
                     input_events_for_thread,
-                    requested_size,
-                    window_title,
-                    window_resizeable,
+                    backend::WaylandWindowConfig {
+                        requested_size,
+                        window_title,
+                        window_resizeable,
+                    },
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
