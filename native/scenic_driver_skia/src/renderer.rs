@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use skia_safe::{
-    Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintStyle, Point, RRect, Rect,
-    Surface, Typeface, Vector,
+    Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintStyle, PathBuilder, Point,
+    RRect, Rect, Surface, Typeface, Vector,
     gpu::{self, SurfaceOrigin, backend_render_targets, gl::FramebufferInfo},
 };
 
@@ -43,6 +43,11 @@ pub enum ScriptOp {
         flag: u16,
     },
     DrawArc {
+        radius: f32,
+        radians: f32,
+        flag: u16,
+    },
+    DrawSector {
         radius: f32,
         radians: f32,
         flag: u16,
@@ -357,6 +362,36 @@ fn draw_script(
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
                     canvas.draw_arc(rect, start, sweep, false, &paint);
+                }
+            }
+            ScriptOp::DrawSector {
+                radius,
+                radians,
+                flag,
+            } => {
+                let rect = Rect::from_xywh(-radius, -radius, radius * 2.0, radius * 2.0);
+                let sweep = radians.to_degrees();
+                let mut builder = PathBuilder::new();
+                builder
+                    .move_to(Point::new(0.0, 0.0))
+                    .line_to(Point::new(*radius, 0.0))
+                    .arc_to(rect, 0.0, sweep, false)
+                    .close();
+                let path = builder.detach();
+                if flag & 0x01 == 0x01 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Fill);
+                    paint.set_color(draw_state.fill_color);
+                    canvas.draw_path(&path, &paint);
+                }
+                if flag & 0x02 == 0x02 {
+                    let mut paint = Paint::default();
+                    paint.set_anti_alias(true);
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_path(&path, &paint);
                 }
             }
             ScriptOp::DrawRect {

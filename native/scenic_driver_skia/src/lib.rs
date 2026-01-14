@@ -823,6 +823,33 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 });
                 rest = tail;
             }
+            0x07 => {
+                if rest.len() < 10 {
+                    return Err("draw_sector opcode truncated".to_string());
+                }
+                let (flag_bytes, tail) = rest.split_at(2);
+                let flag = u16::from_be_bytes([flag_bytes[0], flag_bytes[1]]);
+                let (radius_bytes, tail) = tail.split_at(4);
+                let (radians_bytes, tail) = tail.split_at(4);
+                let radius = f32::from_bits(u32::from_be_bytes([
+                    radius_bytes[0],
+                    radius_bytes[1],
+                    radius_bytes[2],
+                    radius_bytes[3],
+                ]));
+                let radians = f32::from_bits(u32::from_be_bytes([
+                    radians_bytes[0],
+                    radians_bytes[1],
+                    radians_bytes[2],
+                    radians_bytes[3],
+                ]));
+                ops.push(ScriptOp::DrawSector {
+                    radius,
+                    radians,
+                    flag,
+                });
+                rest = tail;
+            }
             0x08 => {
                 if rest.len() < 6 {
                     return Err("draw_circle opcode truncated".to_string());
@@ -1093,6 +1120,22 @@ mod tests {
         assert_eq!(
             ops,
             vec![ScriptOp::DrawArc {
+                radius: 50.0,
+                radians: 1.5707964,
+                flag: 0x03
+            }]
+        );
+    }
+
+    #[test]
+    fn parse_draw_sector() {
+        let script: [u8; 12] = [
+            0x00, 0x07, 0x00, 0x03, 0x42, 0x48, 0x00, 0x00, 0x3F, 0xC9, 0x0F, 0xDB,
+        ];
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert_eq!(
+            ops,
+            vec![ScriptOp::DrawSector {
                 radius: 50.0,
                 radians: 1.5707964,
                 flag: 0x03

@@ -37,7 +37,7 @@ Currently supported ops in Rust:
 - `push_state`, `pop_state`, `pop_push_state`
 - `translate`, `rotate`, `scale`, `transform`
 - `fill_color`, `stroke_color`, `stroke_width`
-- `draw_rect`, `draw_rrect`, `draw_rrectv`, `draw_line`, `draw_circle`, `draw_ellipse`, `draw_arc`
+- `draw_rect`, `draw_rrect`, `draw_rrectv`, `draw_line`, `draw_circle`, `draw_ellipse`, `draw_arc`, `draw_sector`
 - `draw_text`, `font`, `font_size`, `text_align`, `text_base`
 - `draw_script` (stored as `ScriptOp::DrawScript`)
 
