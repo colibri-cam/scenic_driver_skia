@@ -92,14 +92,7 @@ defmodule ScenicDriverSkia.DemoDrm do
       {scene, graph} =
         if codepoint in ["c", "C"] do
           visible = !scene.assigns.cursor_visible
-
-          _ =
-            if visible do
-              Scenic.Driver.Skia.show_cursor()
-            else
-              Scenic.Driver.Skia.hide_cursor()
-            end
-
+          toggle_cursor(visible)
           toggle_text = "cursor_visible: #{visible} (press 'c' to toggle)"
 
           graph =
@@ -220,6 +213,15 @@ defmodule ScenicDriverSkia.DemoDrm do
 
     defp format_key(key, action) do
       "key: #{key} #{action}"
+    end
+
+    defp toggle_cursor(visible) do
+      with pid when is_pid(pid) <- Process.whereis(:skia_driver),
+           renderer <- Scenic.Driver.Skia.renderer_handle(pid) do
+        if visible,
+          do: Scenic.Driver.Skia.show_cursor(renderer),
+          else: Scenic.Driver.Skia.hide_cursor(renderer)
+      end
     end
   end
 
