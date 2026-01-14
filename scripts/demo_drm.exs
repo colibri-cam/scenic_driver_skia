@@ -24,6 +24,8 @@ defmodule ScenicDriverSkia.DemoDrm do
         |> Scenic.Scene.assign(:cursor_pos, {0, 0})
         |> Scenic.Scene.assign(:cursor_button_text, "cursor_button: none")
         |> Scenic.Scene.assign(:key_text, "key: none")
+        |> Scenic.Scene.assign(:cursor_visible, true)
+        |> Scenic.Scene.assign(:cursor_toggle_text, "cursor_visible: true (press 'c' to toggle)")
 
       scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:ok, scene}
@@ -59,8 +61,26 @@ defmodule ScenicDriverSkia.DemoDrm do
 
     def handle_input({:codepoint, {codepoint, _mods}}, _context, scene) do
       scene =
-        scene
-        |> Scenic.Scene.assign(:key_text, "codepoint: #{codepoint}")
+        if codepoint in ["c", "C"] do
+          visible = !scene.assigns.cursor_visible
+          _ =
+            if visible do
+              Scenic.Driver.Skia.show_cursor()
+            else
+              Scenic.Driver.Skia.hide_cursor()
+            end
+
+          scene
+          |> Scenic.Scene.assign(:cursor_visible, visible)
+          |> Scenic.Scene.assign(
+            :cursor_toggle_text,
+            "cursor_visible: #{visible} (press 'c' to toggle)"
+          )
+        else
+          scene
+        end
+
+      scene = Scenic.Scene.assign(scene, :key_text, "codepoint: #{codepoint}")
 
       scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:noreply, scene}
@@ -93,11 +113,12 @@ defmodule ScenicDriverSkia.DemoDrm do
       |> text(scene.assigns.cursor_pos_text, fill: :white, translate: {60, 140})
       |> text(scene.assigns.cursor_button_text, fill: :white, translate: {60, 165})
       |> text(scene.assigns.key_text, fill: :white, translate: {60, 190})
+      |> text(scene.assigns.cursor_toggle_text, fill: :white, translate: {60, 215})
       |> analog_clock(radius: 50, seconds: true, translate: {800, 160}, theme: :light)
       |> digital_clock(
         format: :hours_12,
         seconds: true,
-        translate: {50, 215},
+        translate: {50, 240},
         font: :roboto_mono,
         font_size: 18,
         fill: :white
