@@ -1,4 +1,5 @@
 mod backend;
+mod cursor;
 mod drm_backend;
 mod drm_input;
 mod input;
@@ -16,6 +17,7 @@ use std::thread;
 use std::time::Duration;
 
 use backend::UserEvent;
+use cursor::CursorState;
 use input::{InputEvent, InputQueue, notify_input_ready};
 use renderer::{RenderState, ScriptOp};
 
@@ -34,6 +36,7 @@ struct DriverHandle {
     raster_output: Option<Arc<Mutex<Option<String>>>>,
     dirty: Option<Arc<AtomicBool>>,
     running: Arc<AtomicBool>,
+    cursor_state: Option<Arc<Mutex<CursorState>>>,
     thread: thread::JoinHandle<()>,
 }
 
@@ -96,6 +99,8 @@ pub fn start(
         let input_for_thread = Arc::clone(&input_mask);
         let input_events_for_thread = Arc::clone(&input_events);
         let requested_size = viewport_size;
+        let cursor_state = Arc::new(Mutex::new(CursorState::new()));
+        let cursor_for_thread = Arc::clone(&cursor_state);
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -106,7 +111,10 @@ pub fn start(
                     state_for_thread,
                     input_for_thread,
                     input_events_for_thread,
-                    requested_size,
+                    drm_backend::DrmRunConfig {
+                        requested_size,
+                        cursor_state: cursor_for_thread,
+                    },
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
@@ -119,6 +127,7 @@ pub fn start(
             raster_output: None,
             dirty: Some(dirty),
             running,
+            cursor_state: Some(cursor_state),
             thread,
         }
     } else if backend == "raster" {
@@ -155,6 +164,7 @@ pub fn start(
             raster_output: Some(raster_output),
             dirty: Some(dirty),
             running,
+            cursor_state: None,
             thread,
         }
     } else {
@@ -198,6 +208,7 @@ pub fn start(
             raster_output: None,
             dirty: None,
             running,
+            cursor_state: None,
             thread,
         }
     };
@@ -389,6 +400,37 @@ pub fn set_input_mask(mask: u32) -> Result<(), String> {
         .ok_or_else(|| "renderer not running".to_string())?;
 
     handle.input_mask.store(mask, Ordering::Relaxed);
+
+    Ok(())
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn show_cursor() -> Result<(), String> {
+    set_cursor_visible(true)
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn hide_cursor() -> Result<(), String> {
+    set_cursor_visible(false)
+}
+
+fn set_cursor_visible(visible: bool) -> Result<(), String> {
+    let state = driver_state()
+        .lock()
+        .map_err(|_| "driver state lock poisoned".to_string())?;
+    let handle = state
+        .as_ref()
+        .ok_or_else(|| "renderer not running".to_string())?;
+
+    if let Some(cursor_state) = &handle.cursor_state
+        && let Ok(mut cursor) = cursor_state.lock()
+    {
+        cursor.visible = visible;
+    }
+
+    if let Some(dirty) = &handle.dirty {
+        dirty.store(true, Ordering::Relaxed);
+    }
 
     Ok(())
 }
@@ -955,6 +997,7 @@ mod tests {
             raster_output: None,
             dirty: Some(Arc::new(AtomicBool::new(false))),
             running: Arc::new(AtomicBool::new(false)),
+            cursor_state: None,
             thread,
         });
 

@@ -231,6 +231,24 @@ defmodule Scenic.Driver.Skia do
   end
 
   @doc """
+  Show the cursor when using the DRM backend.
+  """
+  @spec show_cursor() :: :ok | {:error, term()}
+  def show_cursor do
+    Native.show_cursor()
+    |> normalize_start_result()
+  end
+
+  @doc """
+  Hide the cursor when using the DRM backend.
+  """
+  @spec hide_cursor() :: :ok | {:error, term()}
+  def hide_cursor do
+    Native.hide_cursor()
+    |> normalize_start_result()
+  end
+
+  @doc """
   Update the text rendered by the driver.
   """
   @spec set_text(String.t()) :: :ok | {:error, term()}

@@ -43,4 +43,10 @@ defmodule Scenic.Driver.Skia.Native do
 
   @doc false
   def set_input_target(_pid), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def show_cursor, do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
+  def hide_cursor, do: :erlang.nif_error(:nif_not_loaded)
 end

@@ -22,8 +22,9 @@ use gbm::{
 use glutin_egl_sys::egl;
 use glutin_egl_sys::egl::types::{EGLConfig, EGLContext, EGLDisplay, EGLSurface, EGLenum, EGLint};
 use libloading::Library;
-use skia_safe::gpu::gl::FramebufferInfo;
+use skia_safe::{Color, Paint, PaintStyle, gpu::gl::FramebufferInfo};
 
+use crate::cursor::CursorState;
 use crate::drm_input::DrmInput;
 use crate::input::{InputEvent, InputQueue, notify_input_ready};
 use crate::renderer::{RenderState, Renderer};
@@ -444,6 +445,38 @@ fn framebuffer_for_bo(
     Ok(framebuffer)
 }
 
+fn cursor_snapshot(cursor_state: &Arc<Mutex<CursorState>>) -> CursorState {
+    cursor_state
+        .lock()
+        .map(|state| *state)
+        .unwrap_or_else(|_| CursorState::new())
+}
+
+fn draw_software_cursor(renderer: &mut Renderer, cursor_pos: (f32, f32), screen_size: (u32, u32)) {
+    let (width, height) = screen_size;
+    let x = cursor_pos.0.clamp(0.0, width.saturating_sub(1) as f32);
+    let y = cursor_pos.1.clamp(0.0, height.saturating_sub(1) as f32);
+
+    let canvas = renderer.surface_mut().canvas();
+    let mut fill = Paint::default();
+    fill.set_anti_alias(true);
+    fill.set_color(Color::from_argb(240, 255, 255, 255));
+    canvas.draw_circle((x, y), 4.0, &fill);
+
+    let mut stroke = Paint::default();
+    stroke.set_anti_alias(true);
+    stroke.set_style(PaintStyle::Stroke);
+    stroke.set_stroke_width(1.0);
+    stroke.set_color(Color::from_argb(200, 0, 0, 0));
+    canvas.draw_circle((x, y), 4.0, &stroke);
+}
+
+#[derive(Clone)]
+pub struct DrmRunConfig {
+    pub requested_size: Option<(u32, u32)>,
+    pub cursor_state: Arc<Mutex<CursorState>>,
+}
+
 pub fn run(
     stop: Arc<AtomicBool>,
     text: Arc<Mutex<String>>,
@@ -451,7 +484,7 @@ pub fn run(
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
-    requested_size: Option<(u32, u32)>,
+    config: DrmRunConfig,
 ) {
     let card = match open_card() {
         Ok(card) => card,
@@ -479,7 +512,7 @@ pub fn run(
     };
 
     let (connector, mode, crtc_handle) =
-        match first_connected_connector(&card, &resources, requested_size) {
+        match first_connected_connector(&card, &resources, config.requested_size) {
             Ok(values) => values,
             Err(e) => {
                 eprintln!("DRM backend unavailable: {e}");
@@ -528,7 +561,7 @@ pub fn run(
 
     let (width, height) = mode.size();
     let dimensions = (width as u32, height as u32);
-    if let Some(requested) = requested_size
+    if let Some(requested) = config.requested_size
         && requested != dimensions
         && let Ok(mut queue) = input_events.lock()
     {
@@ -540,7 +573,12 @@ pub fn run(
             notify_input_ready(pid);
         }
     }
-    let mut input = DrmInput::new(dimensions, Arc::clone(&input_mask), input_events);
+    let mut input = DrmInput::new(
+        dimensions,
+        Arc::clone(&input_mask),
+        input_events,
+        Arc::clone(&config.cursor_state),
+    );
 
     let gbm_device = match GbmDevice::new(card.as_fd()) {
         Ok(device) => device,
@@ -614,6 +652,10 @@ pub fn run(
     if let Ok(state) = render_state.lock() {
         renderer.redraw(&state);
     }
+    let mut cursor = cursor_snapshot(&config.cursor_state);
+    if cursor.visible {
+        draw_software_cursor(&mut renderer, cursor.pos, dimensions);
+    }
 
     if unsafe {
         egl_state
@@ -667,17 +709,29 @@ pub fn run(
     }
 
     let mut current_bo = Some(bo);
+    let mut last_cursor = cursor;
 
     loop {
         if stop.load(Ordering::Relaxed) {
             break;
         }
         input.poll();
+        cursor = cursor_snapshot(&config.cursor_state);
+        if cursor.visible && cursor.pos != last_cursor.pos {
+            dirty.store(true, Ordering::Relaxed);
+        }
+        if cursor.visible != last_cursor.visible {
+            dirty.store(true, Ordering::Relaxed);
+        }
+        last_cursor = cursor;
         if dirty.swap(false, Ordering::Relaxed) {
             let updated = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
             renderer.set_text(updated);
             if let Ok(state) = render_state.lock() {
                 renderer.redraw(&state);
+            }
+            if cursor.visible {
+                draw_software_cursor(&mut renderer, cursor.pos, dimensions);
             }
 
             if unsafe {

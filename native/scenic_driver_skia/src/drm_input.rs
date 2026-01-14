@@ -11,6 +11,7 @@ use evdev::{
 };
 use libc::input_absinfo;
 
+use crate::cursor::CursorState;
 use crate::input::{
     ACTION_PRESS, ACTION_RELEASE, INPUT_MASK_CODEPOINT, INPUT_MASK_CURSOR_BUTTON,
     INPUT_MASK_CURSOR_POS, INPUT_MASK_CURSOR_SCROLL, INPUT_MASK_KEY, InputEvent, InputQueue,
@@ -54,6 +55,7 @@ pub struct DrmInput {
     screen_size: (u32, u32),
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
+    cursor_state: Arc<Mutex<CursorState>>,
 }
 
 impl DrmInput {
@@ -61,6 +63,7 @@ impl DrmInput {
         screen_size: (u32, u32),
         input_mask: Arc<AtomicU32>,
         input_events: Arc<Mutex<InputQueue>>,
+        cursor_state: Arc<Mutex<CursorState>>,
     ) -> Self {
         let devices = enumerate_devices();
         Self {
@@ -71,6 +74,7 @@ impl DrmInput {
             screen_size,
             input_mask,
             input_events,
+            cursor_state,
         }
     }
 
@@ -213,7 +217,7 @@ impl DrmInput {
         let (width, height) = self.screen_size;
         x = x.clamp(0.0, width.saturating_sub(1) as f32);
         y = y.clamp(0.0, height.saturating_sub(1) as f32);
-        self.cursor_pos = (x, y);
+        self.set_cursor_pos(x, y);
 
         if mask & INPUT_MASK_CURSOR_POS != 0 {
             self.push_input(InputEvent::CursorPos { x, y });
@@ -221,7 +225,7 @@ impl DrmInput {
     }
 
     fn handle_abs_position(&mut self, x: f32, y: f32, mask: u32) {
-        self.cursor_pos = (x, y);
+        self.set_cursor_pos(x, y);
         if mask & INPUT_MASK_CURSOR_POS != 0 {
             self.push_input(InputEvent::CursorPos { x, y });
         }
@@ -234,9 +238,16 @@ impl DrmInput {
         let (width, height) = self.screen_size;
         x = x.clamp(0.0, width.saturating_sub(1) as f32);
         y = y.clamp(0.0, height.saturating_sub(1) as f32);
-        self.cursor_pos = (x, y);
+        self.set_cursor_pos(x, y);
         if mask & INPUT_MASK_CURSOR_POS != 0 {
             self.push_input(InputEvent::CursorPos { x, y });
+        }
+    }
+
+    fn set_cursor_pos(&mut self, x: f32, y: f32) {
+        self.cursor_pos = (x, y);
+        if let Ok(mut cursor) = self.cursor_state.lock() {
+            cursor.pos = (x, y);
         }
     }
 
@@ -888,6 +899,7 @@ mod tests {
                 | INPUT_MASK_CURSOR_BUTTON,
         ));
         let queue = Arc::new(Mutex::new(InputQueue::new()));
+        let cursor_state = Arc::new(Mutex::new(CursorState::new()));
         let mut drm_input = DrmInput {
             devices: vec![input_device],
             cursor_pos: (0.0, 0.0),
@@ -896,6 +908,7 @@ mod tests {
             screen_size: (100, 50),
             input_mask,
             input_events: Arc::clone(&queue),
+            cursor_state,
         };
 
         let _ = vdev.emit(&[
