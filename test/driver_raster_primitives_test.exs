@@ -41,16 +41,19 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
           pixel_at(data, w, 15, 10) == {255, 255, 255}
       end)
 
+    # Background just outside the translated rect bounds.
     assert pixel_at(frame, width, 7, 10) == {0, 0, 0}
     assert pixel_at(frame, width, 10, 7) == {0, 0, 0}
     assert pixel_at(frame, width, 7, 7) == {0, 0, 0}
     assert pixel_at(frame, width, 33, 10) == {0, 0, 0}
     assert pixel_at(frame, width, 10, 33) == {0, 0, 0}
     assert pixel_at(frame, width, 33, 33) == {0, 0, 0}
+    # Stroke samples on each edge.
     assert pixel_at(frame, width, 15, 10) == {255, 255, 255}
     assert pixel_at(frame, width, 10, 15) == {255, 255, 255}
     assert pixel_at(frame, width, 30, 15) == {255, 255, 255}
     assert pixel_at(frame, width, 15, 30) == {255, 255, 255}
+    # Fill sample inside the rect.
     assert pixel_at(frame, width, 20, 20) == {255, 0, 0}
   end
 
