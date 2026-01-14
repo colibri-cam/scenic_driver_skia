@@ -1235,6 +1235,45 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 )));
                 rest = tail;
             }
+            0x80 => {
+                if rest.len() < 2 {
+                    return Err("cap opcode truncated".to_string());
+                }
+                let (cap_bytes, tail) = rest.split_at(2);
+                let cap = u16::from_be_bytes([cap_bytes[0], cap_bytes[1]]);
+                let cap = match cap {
+                    0x00 => skia_safe::PaintCap::Butt,
+                    0x01 => skia_safe::PaintCap::Round,
+                    0x02 => skia_safe::PaintCap::Square,
+                    _ => return Err("cap opcode invalid".to_string()),
+                };
+                ops.push(ScriptOp::StrokeCap(cap));
+                rest = tail;
+            }
+            0x81 => {
+                if rest.len() < 2 {
+                    return Err("join opcode truncated".to_string());
+                }
+                let (join_bytes, tail) = rest.split_at(2);
+                let join = u16::from_be_bytes([join_bytes[0], join_bytes[1]]);
+                let join = match join {
+                    0x00 => skia_safe::PaintJoin::Bevel,
+                    0x01 => skia_safe::PaintJoin::Round,
+                    0x02 => skia_safe::PaintJoin::Miter,
+                    _ => return Err("join opcode invalid".to_string()),
+                };
+                ops.push(ScriptOp::StrokeJoin(join));
+                rest = tail;
+            }
+            0x82 => {
+                if rest.len() < 2 {
+                    return Err("miter_limit opcode truncated".to_string());
+                }
+                let (limit_bytes, tail) = rest.split_at(2);
+                let limit = u16::from_be_bytes([limit_bytes[0], limit_bytes[1]]);
+                ops.push(ScriptOp::StrokeMiterLimit(limit as f32));
+                rest = tail;
+            }
             0x90 => {
                 if rest.len() < 2 {
                     return Err("font opcode truncated".to_string());
@@ -1593,6 +1632,23 @@ mod tests {
                 ll_radius: 4.0,
                 flag: 0x03
             }]
+        );
+    }
+
+    #[test]
+    fn parse_stroke_cap_join_miter() {
+        let script: [u8; 6] = [
+            0x00, 0x80, 0x00, 0x01, 0x00, 0x81, // cap round, join next
+        ];
+        let script = [script.as_slice(), &[0x00, 0x02, 0x00, 0x82, 0x00, 0x05]].concat();
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert_eq!(
+            ops,
+            vec![
+                ScriptOp::StrokeCap(skia_safe::PaintCap::Round),
+                ScriptOp::StrokeJoin(skia_safe::PaintJoin::Miter),
+                ScriptOp::StrokeMiterLimit(5.0)
+            ]
         );
     }
 

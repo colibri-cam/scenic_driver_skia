@@ -13,6 +13,7 @@ Completed:
 - Assets module with local fonts + aliases.
 - Script ingestion tests in Rust.
 - Added script ops for `draw_ellipse`, `draw_arc`, `draw_sector`, `draw_rrectv`, and path primitives (begin/move/line/arc_to/bezier/quadratic/close + fill/stroke + scissor).
+- Added stroke cap/join/miter_limit support for raster/Wayland/DRM.
 
 ## Done
 1. **Input capability plumbing**
@@ -48,7 +49,7 @@ Completed:
 ## Next
 1. **Script opcode parity (rendering coverage)**
    - **Paths & geometry**: extend path and geometry coverage as new Scenic ops surface.
-   - **Paint features**: gradients, image patterns, alpha/opacity, blend modes, stroke caps/joins/dashes.
+   - **Paint features**: gradients, image patterns, alpha/opacity, blend modes, stroke dashes.
    - **Images/bitmaps**: implement image draw ops and texture/stream asset handling similar to Scenic local driver `put_texture` flow.
    - **Clipping**: implement clip rect/path and save/restore semantics to match Scenic script behavior.
    - **Raster coverage**: expand per-primitive raster tests for upcoming paint, image, and clipping features.

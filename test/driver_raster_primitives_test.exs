@@ -420,6 +420,40 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule CapButtScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> line({{0, 0}, {20, 0}},
+          stroke: {10, :white},
+          cap: :butt,
+          translate: {10, 30}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
+  defmodule CapSquareScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> line({{0, 0}, {20, 0}},
+          stroke: {10, :white},
+          cap: :square,
+          translate: {10, 30}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   defmodule StrokeQuadScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -1230,6 +1264,54 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 15, 35) == {0, 0, 0}
   end
 
+  test "cap butt does not extend past line endpoint" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: CapButtScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 20..30, 26..34)
+      end)
+
+    # Stroke is visible along the line.
+    assert any_non_background?(frame, width, 20..30, 26..34)
+    # Butt cap does not extend beyond the endpoint.
+    assert all_background?(frame, width, 34..36, 26..34)
+  end
+
+  test "cap square extends past line endpoint" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: CapSquareScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 20..30, 26..34)
+      end)
+
+    # Square cap extends beyond the endpoint.
+    assert any_non_background?(frame, width, 34..36, 26..34)
+  end
+
   defp wait_for_frame!(renderer, attempts_remaining, predicate) do
     case Native.get_raster_frame(renderer) do
       {:ok, {width, height, frame}} = ok ->
@@ -1267,6 +1349,14 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     Enum.any?(x_range, fn x ->
       Enum.any?(y_range, fn y ->
         pixel_at(frame, width, x, y) != {0, 0, 0}
+      end)
+    end)
+  end
+
+  defp all_background?(frame, width, x_range, y_range) do
+    Enum.all?(x_range, fn x ->
+      Enum.all?(y_range, fn y ->
+        pixel_at(frame, width, x, y) == {0, 0, 0}
       end)
     end)
   end

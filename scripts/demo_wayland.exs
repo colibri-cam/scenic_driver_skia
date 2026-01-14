@@ -44,7 +44,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
       |> script("rrectv_demo", translate: {x3, y1})
       |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
-      |> line({{0, 0}, {200, 120}}, stroke: {4, :white}, translate: {x1, y2})
+      |> line({{0, 0}, {200, 120}}, stroke: {4, :white}, cap: :round, translate: {x1, y2})
       |> text("line", fill: :white, translate: {x1, y2 + label_offset})
       |> circle(55, fill: :green, stroke: {3, :white}, translate: {x2 + 100, y2 + 60})
       |> text("circle", fill: :white, translate: {x2, y2 + label_offset})
@@ -59,6 +59,8 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> quad({{0, 0}, {215, 0}, {185, 120}, {0, 140}},
         fill: :olive,
         stroke: {3, :white},
+        join: :round,
+        miter_limit: 2,
         translate: {x4, y1}
       )
       |> text("quad", fill: :white, translate: {x4, y1 + label_offset})

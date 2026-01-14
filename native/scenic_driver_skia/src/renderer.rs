@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use skia_safe::{
-    ClipOp, Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintStyle, PathBuilder,
-    Point, RRect, Rect, Surface, Typeface, Vector,
+    ClipOp, Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintCap, PaintJoin,
+    PaintStyle, PathBuilder, Point, RRect, Rect, Surface, Typeface, Vector,
     gpu::{self, SurfaceOrigin, backend_render_targets, gl::FramebufferInfo},
 };
 
@@ -26,6 +26,9 @@ pub enum ScriptOp {
     FillColor(Color),
     StrokeColor(Color),
     StrokeWidth(f32),
+    StrokeCap(PaintCap),
+    StrokeJoin(PaintJoin),
+    StrokeMiterLimit(f32),
     Scissor {
         width: f32,
         height: f32,
@@ -345,6 +348,9 @@ fn draw_script(
             ScriptOp::FillColor(color) => draw_state.fill_color = *color,
             ScriptOp::StrokeColor(color) => draw_state.stroke_color = *color,
             ScriptOp::StrokeWidth(width) => draw_state.stroke_width = *width,
+            ScriptOp::StrokeCap(cap) => draw_state.stroke_cap = *cap,
+            ScriptOp::StrokeJoin(join) => draw_state.stroke_join = *join,
+            ScriptOp::StrokeMiterLimit(limit) => draw_state.stroke_miter_limit = *limit,
             ScriptOp::Scissor { width, height } => {
                 let rect = Rect::from_xywh(0.0, 0.0, *width, *height);
                 canvas.clip_rect(rect, ClipOp::Intersect, true);
@@ -370,6 +376,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_path(&path.detach(), &paint);
                 }
             }
@@ -425,6 +434,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_line(Point::new(*x0, *y0), Point::new(*x1, *y1), &paint);
                 }
             }
@@ -457,6 +469,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_path(&path, &paint);
                 }
             }
@@ -492,6 +507,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_path(&path, &paint);
                 }
             }
@@ -508,6 +526,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_circle(Point::new(0.0, 0.0), *radius, &paint);
                 }
             }
@@ -529,6 +550,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_oval(rect, &paint);
                 }
             }
@@ -552,6 +576,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_arc(rect, start, sweep, false, &paint);
                 }
             }
@@ -582,6 +609,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_path(&path, &paint);
                 }
             }
@@ -604,6 +634,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_rect(rect, &paint);
                 }
             }
@@ -627,6 +660,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_rrect(rrect, &paint);
                 }
             }
@@ -659,6 +695,9 @@ fn draw_script(
                     paint.set_style(PaintStyle::Stroke);
                     paint.set_color(draw_state.stroke_color);
                     paint.set_stroke_width(draw_state.stroke_width);
+                    paint.set_stroke_cap(draw_state.stroke_cap);
+                    paint.set_stroke_join(draw_state.stroke_join);
+                    paint.set_stroke_miter(draw_state.stroke_miter_limit);
                     canvas.draw_rrect(rrect, &paint);
                 }
             }
@@ -738,6 +777,9 @@ struct DrawState {
     fill_color: Color,
     stroke_color: Color,
     stroke_width: f32,
+    stroke_cap: PaintCap,
+    stroke_join: PaintJoin,
+    stroke_miter_limit: f32,
     path: Option<PathBuilder>,
     font_id: Option<String>,
     font_size: f32,
@@ -752,6 +794,9 @@ impl Default for DrawState {
             fill_color: Color::BLACK,
             stroke_color: Color::BLACK,
             stroke_width: 1.0,
+            stroke_cap: PaintCap::Butt,
+            stroke_join: PaintJoin::Miter,
+            stroke_miter_limit: 4.0,
             path: None,
             font_id: None,
             font_size: Self::DEFAULT_FONT_SIZE,
@@ -770,6 +815,9 @@ impl DrawState {
             fill_color: self.fill_color,
             stroke_color: self.stroke_color,
             stroke_width: self.stroke_width,
+            stroke_cap: self.stroke_cap,
+            stroke_join: self.stroke_join,
+            stroke_miter_limit: self.stroke_miter_limit,
             path: self.path.clone(),
             font_id: self.font_id.clone(),
             font_size: self.font_size,
@@ -797,6 +845,9 @@ impl DrawState {
         self.fill_color = snapshot.fill_color;
         self.stroke_color = snapshot.stroke_color;
         self.stroke_width = snapshot.stroke_width;
+        self.stroke_cap = snapshot.stroke_cap;
+        self.stroke_join = snapshot.stroke_join;
+        self.stroke_miter_limit = snapshot.stroke_miter_limit;
         self.path = snapshot.path;
         self.font_id = snapshot.font_id;
         self.font_size = snapshot.font_size;
@@ -827,6 +878,9 @@ struct DrawStateSnapshot {
     fill_color: Color,
     stroke_color: Color,
     stroke_width: f32,
+    stroke_cap: PaintCap,
+    stroke_join: PaintJoin,
+    stroke_miter_limit: f32,
     path: Option<PathBuilder>,
     font_id: Option<String>,
     font_size: f32,
@@ -840,6 +894,9 @@ impl Default for DrawStateSnapshot {
             fill_color: Color::BLACK,
             stroke_color: Color::BLACK,
             stroke_width: 1.0,
+            stroke_cap: PaintCap::Butt,
+            stroke_join: PaintJoin::Miter,
+            stroke_miter_limit: 4.0,
             path: None,
             font_id: None,
             font_size: DrawState::DEFAULT_FONT_SIZE,
