@@ -1,5 +1,5 @@
 defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Scenic.Driver.Skia.Native
   alias Scenic.Driver.Skia.TestSupport.ViewPort, as: ViewPortHelper

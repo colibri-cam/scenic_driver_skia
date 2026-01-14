@@ -16,7 +16,7 @@ defmodule Scenic.Driver.Skia.TestSupport.ViewPort do
 
     drivers =
       Keyword.get(opts, :drivers, [
-        [module: Scenic.Driver.Skia, name: :skia_driver, backend: :raster]
+        [module: Scenic.Driver.Skia, backend: :raster]
       ])
 
     size = Keyword.get(opts, :size, {200, 120})
