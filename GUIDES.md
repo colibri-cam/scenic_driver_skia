@@ -11,7 +11,7 @@ The primary goals are:
 ## Data Flow
 1. Scenic ViewPort updates the script table.
 2. Driver fetches scripts and serializes them with `Scenic.Script.serialize/1`.
-3. Driver calls `Native.submit_script_with_id(id, binary)` for each script id.
+3. Driver calls `Native.submit_script_with_id(renderer, id, binary)` for each script id.
 4. Rust parses the binary into `Vec<ScriptOp>` and stores it in `RenderState.scripts`.
 5. Redraw resolves the root script (`_root_`) and replays cached ops on the Skia canvas.
 

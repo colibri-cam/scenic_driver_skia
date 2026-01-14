@@ -29,4 +29,4 @@ Backends:
 - `backend: :drm` renders directly on Linux DRM hardware (tested with AMD GPUs).
   - Configure DRM with `drm: [card: "/dev/dri/card0", hw_cursor: true, input_log: false]`.
 - `backend: :raster` renders to an offscreen surface (container-friendly).
-  - Fetch the latest RGB frame via `Scenic.Driver.Skia.Native.get_raster_frame/0`.
+  - Fetch the latest RGB frame via `Scenic.Driver.Skia.Native.get_raster_frame(renderer)`.

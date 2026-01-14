@@ -51,7 +51,7 @@ The driver can target different rendering backends:
 - `backend: :drm` renders directly on Linux DRM hardware.
   - Configure DRM with `drm: [card: "/dev/dri/card0", hw_cursor: true, input_log: false]`.
 - `backend: :raster` renders to an offscreen surface.
-  - Fetch the latest RGB frame via `Scenic.Driver.Skia.Native.get_raster_frame/0`.
+  - Fetch the latest RGB frame via `Scenic.Driver.Skia.Native.get_raster_frame(renderer)`.
 
 ## Demos
 
