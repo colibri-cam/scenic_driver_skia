@@ -330,10 +330,12 @@ fn update_cursor_plane(
     let mut req = atomic::AtomicModeReq::new();
     if cursor.visible {
         let (screen_w, screen_h) = screen_size;
-        let max_x = screen_w.saturating_sub(plane.size.0) as f32;
-        let max_y = screen_h.saturating_sub(plane.size.1) as f32;
-        let x = cursor.pos.0.clamp(0.0, max_x).round() as i64;
-        let y = cursor.pos.1.clamp(0.0, max_y).round() as i64;
+        let min_x = -(plane.size.0 as i64) + 1;
+        let min_y = -(plane.size.1 as i64) + 1;
+        let max_x = screen_w.saturating_sub(1) as i64;
+        let max_y = screen_h.saturating_sub(1) as i64;
+        let x = (cursor.pos.0.round() as i64).clamp(min_x, max_x);
+        let y = (cursor.pos.1.round() as i64).clamp(min_y, max_y);
         req.add_property(
             plane.handle,
             prop_handle(&plane.props, "FB_ID")?,
