@@ -12,7 +12,7 @@ defmodule ScenicDriverSkia.BenchScriptIngest do
     warmup = Keyword.get(opts, :warmup, 100)
 
     stop_renderer()
-    case Native.start("raster") do
+    case Native.start("raster", nil, "Scenic Window", false) do
       :ok -> :ok
       {:ok, _} -> :ok
     end

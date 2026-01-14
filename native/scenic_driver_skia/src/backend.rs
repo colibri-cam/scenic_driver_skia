@@ -132,8 +132,12 @@ fn create_env_renderer_with_event_loop(
     event_loop: &EventLoop<UserEvent>,
     initial_text: String,
     requested_size: Option<(u32, u32)>,
+    window_title: String,
+    window_resizeable: bool,
 ) -> Result<(Env, Renderer), String> {
-    let window_attributes = WindowAttributes::default().with_title("skia-wayland-hello");
+    let window_attributes = WindowAttributes::default()
+        .with_title(window_title)
+        .with_resizable(window_resizeable);
     let window_attributes = if let Some((width, height)) = requested_size {
         window_attributes.with_inner_size(LogicalSize::new(width, height))
     } else {
@@ -562,14 +566,21 @@ pub fn run(
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
     requested_size: Option<(u32, u32)>,
+    window_title: String,
+    window_resizeable: bool,
 ) {
     let mut el_builder = EventLoop::<UserEvent>::with_user_event();
     EventLoopBuilderExtWayland::with_any_thread(&mut el_builder, true);
     let el = el_builder.build().expect("Failed to create event loop");
     let proxy = el.create_proxy();
     let _ = proxy_ready.send(proxy);
-    let (env, renderer) =
-        match create_env_renderer_with_event_loop(&el, initial_text.clone(), requested_size) {
+    let (env, renderer) = match create_env_renderer_with_event_loop(
+        &el,
+        initial_text.clone(),
+        requested_size,
+        window_title,
+        window_resizeable,
+    ) {
             Ok(values) => values,
             Err(err) => {
                 eprintln!("Failed to initialize renderer: {err}");

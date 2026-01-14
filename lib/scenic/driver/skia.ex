@@ -57,8 +57,11 @@ defmodule Scenic.Driver.Skia do
     Logger.info("Scenic.Driver.Skia init: #{inspect(opts)}")
 
     viewport_size = normalize_viewport_size(driver.viewport.size)
+    window_opts = Keyword.get(opts, :window, [])
+    window_title = Keyword.get(window_opts, :title, "Scenic Window")
+    window_resizeable = Keyword.get(window_opts, :resizeable, false)
 
-    case Native.start(opts[:backend], viewport_size) do
+    case Native.start(opts[:backend], viewport_size, window_title, window_resizeable) do
       :ok ->
         maybe_set_raster_output(opts)
         maybe_set_input_target(self())
@@ -215,7 +218,7 @@ defmodule Scenic.Driver.Skia do
   def start(backend) when is_atom(backend) or is_binary(backend) do
     backend
     |> normalize_backend()
-    |> Native.start(nil)
+    |> Native.start(nil, "Scenic Window", false)
     |> normalize_start_result()
   end
 

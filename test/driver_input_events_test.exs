@@ -9,7 +9,7 @@ defmodule Scenic.Driver.Skia.InputEventsTest do
   test "drains input events while raster backend is running" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
-    case Native.start("raster", nil) do
+    case Native.start("raster", nil, "Scenic Window", false) do
       :ok -> :ok
       {:ok, _} -> :ok
       other -> flunk("start returned #{inspect(other)}")

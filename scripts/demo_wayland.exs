@@ -115,7 +115,7 @@ defmodule ScenicDriverSkia.DemoWayland do
         size: {400, 300},
         default_scene: DemoScene,
         drivers: [
-          [module: Scenic.Driver.Skia, name: :skia_driver, backend: :wayland, debug: false]
+          [module: Scenic.Driver.Skia, name: :skia_driver, backend: :wayland, debug: false, window: [resizeable: true, title: "Scenic Wayland"]]
         ]
       )
 
