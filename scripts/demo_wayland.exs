@@ -6,11 +6,28 @@ defmodule ScenicDriverSkia.DemoWayland do
 
     def init(scene, _args, _opts) do
       scene = Scenic.Scene.push_script(scene, build_rrectv_script(), "rrectv_demo")
-      graph = build_graph()
+      scene = Scenic.Scene.assign(scene, join_miter_limit: 1)
+      scene = schedule_join_tick(scene)
+      graph = build_graph(scene.assigns.join_miter_limit)
       {:ok, Scenic.Scene.push_graph(scene, graph)}
     end
 
-    defp build_graph do
+    def handle_info(:join_tick, scene) do
+      limit =
+        case scene.assigns.join_miter_limit do
+          1 -> 20
+          _ -> 1
+        end
+
+      scene =
+        scene
+        |> Scenic.Scene.assign(join_miter_limit: limit)
+        |> Scenic.Scene.push_graph(build_graph(limit))
+
+      {:noreply, schedule_join_tick(scene)}
+    end
+
+    defp build_graph(join_miter_limit) do
       x1 = 80
       x2 = 700
       x3 = 1320
@@ -44,8 +61,12 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
       |> script("rrectv_demo", translate: {x3, y1})
       |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
-      |> line({{0, 0}, {200, 120}}, stroke: {4, :white}, cap: :round, translate: {x1, y2})
-      |> text("line", fill: :white, translate: {x1, y2 + label_offset})
+      |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :butt, translate: {x1, y2})
+      |> text("cap: butt", fill: :white, translate: {x1, y2 + 30})
+      |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :round, translate: {x1, y2 + 50})
+      |> text("cap: round", fill: :white, translate: {x1, y2 + 80})
+      |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :square, translate: {x1, y2 + 100})
+      |> text("cap: square", fill: :white, translate: {x1, y2 + 130})
       |> circle(55, fill: :green, stroke: {3, :white}, translate: {x2 + 100, y2 + 60})
       |> text("circle", fill: :white, translate: {x2, y2 + label_offset})
       |> ellipse({70, 45}, fill: :orange, stroke: {3, :white}, translate: {x3 + 100, y2 + 60})
@@ -80,8 +101,56 @@ defmodule ScenicDriverSkia.DemoWayland do
         translate: {x1, y4}
       )
       |> text("scissor", fill: :white, translate: {x1, y4 + label_offset})
+      |> path(
+        [
+          :begin,
+          {:move_to, 0, 160},
+          {:line_to, 100, 0},
+          {:line_to, 200, 160}
+        ],
+        stroke: {24, :white},
+        join: :miter,
+        miter_limit: join_miter_limit,
+        translate: {x2, y4}
+      )
+      |> line({{0, 160}, {100, 0}}, stroke: {2, :red}, translate: {x2, y4})
+      |> line({{100, 0}, {200, 160}}, stroke: {2, :blue}, translate: {x2, y4})
+      |> text("join: miter (limit #{join_miter_limit})",
+        fill: :white,
+        translate: {x2, y4 + 120}
+      )
+      |> path(
+        [
+          :begin,
+          {:move_to, 0, 80},
+          {:line_to, 100, 0},
+          {:line_to, 200, 80}
+        ],
+        stroke: {10, :white},
+        join: :bevel,
+        translate: {x4, y4}
+      )
+      |> text("join: bevel", fill: :white, translate: {x4, y4 + 100})
+      |> path(
+        [
+          :begin,
+          {:move_to, 0, 80},
+          {:line_to, 100, 0},
+          {:line_to, 200, 80}
+        ],
+        stroke: {10, :white},
+        join: :round,
+        translate: {x4, y4 + 140}
+      )
+      |> text("join: round", fill: :white, translate: {x4, y4 + 240})
       |> text("text", fill: :yellow, font_size: 30, translate: {x3, y3 + 70})
       |> text("text", fill: :white, translate: {x3, y3 + label_offset})
+    end
+
+    defp schedule_join_tick(scene) do
+      Process.send_after(self(), :join_tick, 1_000)
+
+      scene
     end
 
     defp build_rrectv_script do
