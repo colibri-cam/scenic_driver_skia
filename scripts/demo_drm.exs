@@ -4,6 +4,8 @@ defmodule ScenicDriverSkia.DemoDrm do
     import Scenic.Clock.Components
     import Scenic.Primitives
 
+    require Logger
+
     def init(scene, _args, _opts) do
       :ok =
         Scenic.Scene.request_input(scene, [
@@ -90,6 +92,7 @@ defmodule ScenicDriverSkia.DemoDrm do
       {scene, graph} =
         if codepoint in ["c", "C"] do
           visible = !scene.assigns.cursor_visible
+
           _ =
             if visible do
               Scenic.Driver.Skia.show_cursor()
@@ -128,10 +131,6 @@ defmodule ScenicDriverSkia.DemoDrm do
       {:noreply, scene}
     end
 
-    def handle_input(_event, _context, scene) do
-      {:noreply, scene}
-    end
-
     def handle_input({:viewport, {:reshape, _size}}, _context, scene) do
       {width, height} = current_viewport_size(scene)
       Logger.info("viewport reshape -> ViewPort size now #{width}x#{height}")
@@ -150,6 +149,10 @@ defmodule ScenicDriverSkia.DemoDrm do
       {:noreply, scene}
     end
 
+    def handle_input(_event, _context, scene) do
+      {:noreply, scene}
+    end
+
     def handle_info(:change_color, scene) do
       rect_fill =
         case scene.assigns.rect_fill do
@@ -159,7 +162,10 @@ defmodule ScenicDriverSkia.DemoDrm do
 
       graph =
         scene.assigns.graph
-        |> Scenic.Graph.modify(:color_rect, &Scenic.Primitives.rect(&1, {200, 120}, fill: rect_fill))
+        |> Scenic.Graph.modify(
+          :color_rect,
+          &Scenic.Primitives.rect(&1, {200, 120}, fill: rect_fill)
+        )
 
       scene =
         scene
