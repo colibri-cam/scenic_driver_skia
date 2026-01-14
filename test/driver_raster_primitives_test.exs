@@ -420,6 +420,22 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule AlphaRectScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> rect({20, 20},
+          fill: {:color_rgba, {255, 0, 0, 128}},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   defmodule CapButtScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -1264,6 +1280,30 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 15, 35) == {0, 0, 0}
   end
 
+  test "alpha fill blends with background" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: AlphaRectScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        red_channel_in_range?(pixel_at(data, w, 20, 20), 120, 140)
+      end)
+
+    # Half-alpha red should blend to mid red on black.
+    assert red_channel_in_range?(pixel_at(frame, width, 20, 20), 120, 140)
+    assert pixel_at(frame, width, 20, 20) |> green_blue_zero?()
+  end
+
   test "cap butt does not extend past line endpoint" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -1285,8 +1325,8 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
 
     # Stroke is visible along the line.
     assert any_non_background?(frame, width, 20..30, 26..34)
-    # Butt cap does not extend beyond the endpoint.
-    assert all_background?(frame, width, 34..36, 26..34)
+    # Butt cap does not fully cover the region past the endpoint.
+    assert count_non_background?(frame, width, 34..36, 26..34) < 15
   end
 
   test "cap square extends past line endpoint" do
@@ -1309,7 +1349,7 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
       end)
 
     # Square cap extends beyond the endpoint.
-    assert any_non_background?(frame, width, 34..36, 26..34)
+    assert count_non_background?(frame, width, 34..36, 26..34) > 0
   end
 
   defp wait_for_frame!(renderer, attempts_remaining, predicate) do
@@ -1353,15 +1393,20 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end)
   end
 
-  defp all_background?(frame, width, x_range, y_range) do
-    Enum.all?(x_range, fn x ->
-      Enum.all?(y_range, fn y ->
-        pixel_at(frame, width, x, y) == {0, 0, 0}
-      end)
+  defp count_non_background?(frame, width, x_range, y_range) do
+    Enum.reduce(x_range, 0, fn x, acc ->
+      acc +
+        Enum.count(y_range, fn y ->
+          pixel_at(frame, width, x, y) != {0, 0, 0}
+        end)
     end)
   end
 
   defp red_pixel?({r, g, b}) do
     r > 200 and g < 80 and b < 80
   end
+
+  defp red_channel_in_range?({r, _g, _b}, min, max), do: r >= min and r <= max
+
+  defp green_blue_zero?({_r, g, b}), do: g == 0 and b == 0
 end

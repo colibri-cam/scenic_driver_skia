@@ -101,6 +101,11 @@ defmodule ScenicDriverSkia.DemoWayland do
         translate: {x1, y4}
       )
       |> text("scissor", fill: :white, translate: {x1, y4 + label_offset})
+      |> rect({200, 120},
+        fill: {:color_rgba, {255, 0, 0, 128}},
+        translate: {x3, y4}
+      )
+      |> text("alpha 0.5", fill: :white, translate: {x3, y4 + label_offset})
       |> path(
         [
           :begin,
