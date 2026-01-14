@@ -25,7 +25,7 @@ use libloading::Library;
 use skia_safe::gpu::gl::FramebufferInfo;
 
 use crate::drm_input::DrmInput;
-use crate::input::InputQueue;
+use crate::input::{InputEvent, InputQueue, notify_input_ready};
 use crate::renderer::{RenderState, Renderer};
 
 const EGL_PLATFORM_GBM_KHR: EGLenum = 0x31D7;
@@ -68,9 +68,41 @@ fn open_card() -> Result<Card, String> {
     Ok(Card(fd))
 }
 
+fn mode_distance(mode: &control::Mode, requested: (u32, u32)) -> i64 {
+    let (width, height) = mode.size();
+    let dx = width as i64 - requested.0 as i64;
+    let dy = height as i64 - requested.1 as i64;
+    dx * dx + dy * dy
+}
+
+fn choose_mode(
+    modes: &[control::Mode],
+    requested: Option<(u32, u32)>,
+) -> Result<control::Mode, String> {
+    let first = modes
+        .first()
+        .cloned()
+        .ok_or_else(|| "connector has no modes".to_string())?;
+    let Some(requested) = requested else {
+        return Ok(first);
+    };
+
+    let mut best = first;
+    let mut best_score = mode_distance(&best, requested);
+    for mode in modes.iter().skip(1) {
+        let score = mode_distance(mode, requested);
+        if score < best_score {
+            best = *mode;
+            best_score = score;
+        }
+    }
+    Ok(best)
+}
+
 fn first_connected_connector(
     card: &Card,
     resources: &ResourceHandles,
+    requested: Option<(u32, u32)>,
 ) -> Result<(connector::Handle, control::Mode, crtc::Handle), String> {
     for handle in resources.connectors() {
         let info = card
@@ -81,11 +113,8 @@ fn first_connected_connector(
             continue;
         }
 
-        let mode = info
-            .modes()
-            .first()
-            .cloned()
-            .ok_or_else(|| format!("connector {handle:?} has no modes"))?;
+        let mode = choose_mode(info.modes(), requested)
+            .map_err(|err| format!("connector {handle:?} {err}"))?;
 
         let crtc = resources
             .crtcs()
@@ -422,6 +451,7 @@ pub fn run(
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
+    requested_size: Option<(u32, u32)>,
 ) {
     let card = match open_card() {
         Ok(card) => card,
@@ -448,13 +478,14 @@ pub fn run(
         }
     };
 
-    let (connector, mode, crtc_handle) = match first_connected_connector(&card, &resources) {
-        Ok(values) => values,
-        Err(e) => {
-            eprintln!("DRM backend unavailable: {e}");
-            return;
-        }
-    };
+    let (connector, mode, crtc_handle) =
+        match first_connected_connector(&card, &resources, requested_size) {
+            Ok(values) => values,
+            Err(e) => {
+                eprintln!("DRM backend unavailable: {e}");
+                return;
+            }
+        };
 
     let plane = match find_primary_plane(&card, &resources, crtc_handle) {
         Ok(handle) => handle,
@@ -497,6 +528,18 @@ pub fn run(
 
     let (width, height) = mode.size();
     let dimensions = (width as u32, height as u32);
+    if let Some(requested) = requested_size
+        && requested != dimensions
+        && let Ok(mut queue) = input_events.lock()
+    {
+        let notify = queue.push_event(InputEvent::ViewportReshape {
+            width: dimensions.0,
+            height: dimensions.1,
+        });
+        if let Some(pid) = notify {
+            notify_input_ready(pid);
+        }
+    }
     let mut input = DrmInput::new(dimensions, Arc::clone(&input_mask), input_events);
 
     let gbm_device = match GbmDevice::new(card.as_fd()) {

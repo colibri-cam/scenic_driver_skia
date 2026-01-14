@@ -29,10 +29,12 @@ pub fn run(
     output_path: Arc<Mutex<Option<String>>>,
     text: Arc<Mutex<String>>,
     input_mask: Arc<AtomicU32>,
+    requested_size: Option<(u32, u32)>,
 ) {
     let _input_mask = input_mask;
-    let width = 800;
-    let height = 600;
+    let (width, height) = requested_size.unwrap_or((800, 600));
+    let width = width.max(1) as i32;
+    let height = height.max(1) as i32;
 
     let image_info = ImageInfo::new(
         (width, height),

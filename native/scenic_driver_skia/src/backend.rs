@@ -131,10 +131,14 @@ impl App {
 fn create_env_renderer_with_event_loop(
     event_loop: &EventLoop<UserEvent>,
     initial_text: String,
+    requested_size: Option<(u32, u32)>,
 ) -> Result<(Env, Renderer), String> {
-    let window_attributes = WindowAttributes::default()
-        .with_title("skia-wayland-hello")
-        .with_inner_size(LogicalSize::new(800, 600));
+    let window_attributes = WindowAttributes::default().with_title("skia-wayland-hello");
+    let window_attributes = if let Some((width, height)) = requested_size {
+        window_attributes.with_inner_size(LogicalSize::new(width, height))
+    } else {
+        window_attributes.with_inner_size(LogicalSize::new(800, 600))
+    };
 
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
@@ -557,20 +561,22 @@ pub fn run(
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
+    requested_size: Option<(u32, u32)>,
 ) {
     let mut el_builder = EventLoop::<UserEvent>::with_user_event();
     EventLoopBuilderExtWayland::with_any_thread(&mut el_builder, true);
     let el = el_builder.build().expect("Failed to create event loop");
     let proxy = el.create_proxy();
     let _ = proxy_ready.send(proxy);
-    let (env, renderer) = match create_env_renderer_with_event_loop(&el, initial_text.clone()) {
-        Ok(values) => values,
-        Err(err) => {
-            eprintln!("Failed to initialize renderer: {err}");
-            running_flag.store(false, Ordering::Relaxed);
-            return;
-        }
-    };
+    let (env, renderer) =
+        match create_env_renderer_with_event_loop(&el, initial_text.clone(), requested_size) {
+            Ok(values) => values,
+            Err(err) => {
+                eprintln!("Failed to initialize renderer: {err}");
+                running_flag.store(false, Ordering::Relaxed);
+                return;
+            }
+        };
     let size = env.window.inner_size();
 
     let mut app = App {

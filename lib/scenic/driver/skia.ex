@@ -47,11 +47,18 @@ defmodule Scenic.Driver.Skia do
     end
   end
 
+  @doc """
+  Scenic callback invoked when a driver is started as part of a ViewPort.
+
+  Use `start/0` or `start/1` only for manual renderer startup outside the ViewPort lifecycle.
+  """
   @impl Scenic.Driver
   def init(driver, opts) do
     Logger.info("Scenic.Driver.Skia init: #{inspect(opts)}")
 
-    case Native.start(opts[:backend]) do
+    viewport_size = normalize_viewport_size(driver.viewport.size)
+
+    case Native.start(opts[:backend], viewport_size) do
       :ok ->
         maybe_set_raster_output(opts)
         maybe_set_input_target(self())
@@ -162,6 +169,12 @@ defmodule Scenic.Driver.Skia do
     {:ok, driver}
   end
 
+  defp normalize_viewport_size(nil), do: nil
+
+  defp normalize_viewport_size({width, height}) do
+    {round(width), round(height)}
+  end
+
   @impl Scenic.Driver
   def del_scripts(script_ids, driver) do
     Logger.debug("Scenic.Driver.Skia del_scripts: #{inspect(script_ids)}")
@@ -184,16 +197,25 @@ defmodule Scenic.Driver.Skia do
   end
 
   @doc """
-  Start the renderer with the provided backend. Accepts `:wayland` or `:drm`.
+  Start the renderer manually with the provided backend.
+
+  This bypasses the Scenic ViewPort lifecycle and is intended for demos/tests.
+  Accepts `:wayland` or `:drm`.
   """
   @spec start() :: :ok | {:error, term()}
   def start, do: start(:wayland)
 
+  @doc """
+  Start the renderer manually with the provided backend.
+
+  This bypasses the Scenic ViewPort lifecycle and is intended for demos/tests.
+  Accepts `:wayland` or `:drm`.
+  """
   @spec start(:wayland | :drm | String.t()) :: :ok | {:error, term()}
   def start(backend) when is_atom(backend) or is_binary(backend) do
     backend
     |> normalize_backend()
-    |> Native.start()
+    |> Native.start(nil)
     |> normalize_start_result()
   end
 

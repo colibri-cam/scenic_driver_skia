@@ -25,6 +25,12 @@ Completed:
    - Push-based `:input_ready` notifications and event draining into `send_input/2`.
 5. **Input tests**
    - Translation unit tests and input event drain integration test.
+6. **Wayland resize flow**
+   - Resize GL surface and renderer on window resize.
+   - Emit viewport reshape input on size changes.
+7. **DRM initial mode selection**
+   - Pick closest connector mode to viewport size.
+   - Emit viewport reshape input if mode differs from requested size.
 
 ## Next
 1. **DRM input integration**
@@ -33,9 +39,8 @@ Completed:
 2. **Cursor support**
    - Track cursor visibility and last position in driver assigns.
    - Implement show/hide cursor and cursor position updates for input events.
-3. **Window resize flow**
-   - Wayland: update the Skia surface, store new size, and request redraw.
-   - Notify viewport when size changes as required by Scenic.
+3. **Window resize flow (DRM, if needed)**
+   - Confirm whether DRM needs explicit resize handling beyond initial modeset (hotplug).
 4. **Viewport options wiring**
    - Wire `window` options (title, resizeable) to backend initialization.
    - Use viewport size for initial window sizing (fallback to defaults).

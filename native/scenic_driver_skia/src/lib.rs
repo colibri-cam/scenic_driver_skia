@@ -45,7 +45,7 @@ fn driver_state() -> &'static Mutex<Option<DriverHandle>> {
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn start(backend: Option<String>) -> Result<(), String> {
+pub fn start(backend: Option<String>, viewport_size: Option<(u32, u32)>) -> Result<(), String> {
     let backend = backend
         .map(|b| b.to_lowercase())
         .unwrap_or_else(|| String::from("wayland"));
@@ -90,6 +90,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
         let stop_for_thread = Arc::clone(&stop);
         let input_for_thread = Arc::clone(&input_mask);
         let input_events_for_thread = Arc::clone(&input_events);
+        let requested_size = viewport_size;
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -100,6 +101,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
                     state_for_thread,
                     input_for_thread,
                     input_events_for_thread,
+                    requested_size,
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
@@ -124,6 +126,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
         let raster_output = Arc::new(Mutex::new(None));
         let output_for_thread = Arc::clone(&raster_output);
         let input_for_thread = Arc::clone(&input_mask);
+        let requested_size = viewport_size;
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -134,6 +137,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
                     output_for_thread,
                     text_for_thread,
                     input_for_thread,
+                    requested_size,
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
@@ -158,6 +162,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
         let state_for_thread = Arc::clone(&render_state);
         let input_for_thread = Arc::clone(&input_mask);
         let input_events_for_thread = Arc::clone(&input_events);
+        let requested_size = viewport_size;
         let thread = thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -168,6 +173,7 @@ pub fn start(backend: Option<String>) -> Result<(), String> {
                     state_for_thread,
                     input_for_thread,
                     input_events_for_thread,
+                    requested_size,
                 )
             })
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
