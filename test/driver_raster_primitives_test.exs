@@ -144,6 +144,23 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule SectorScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> sector({12, :math.pi() / 2},
+          fill: :red,
+          stroke: {2, :white},
+          translate: {20, 20}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   test "draw_rect fills expected pixels" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -412,6 +429,42 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 8, 20) != {0, 0, 0}
     assert pixel_at(frame, width, 20, 32) != {0, 0, 0}
     assert pixel_at(frame, width, 20, 20) == {0, 0, 0}
+  end
+
+  test "draw_sector fills expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: SectorScene)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop()
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(40, fn {w, _h, data} ->
+        red_pixel?(pixel_at(data, w, 24, 24)) and
+          pixel_at(data, w, 32, 20) != {0, 0, 0}
+      end)
+
+    # Background just outside the translated sector bounds.
+    assert pixel_at(frame, width, 6, 20) == {0, 0, 0}
+    assert pixel_at(frame, width, 20, 6) == {0, 0, 0}
+    assert pixel_at(frame, width, 34, 20) == {0, 0, 0}
+    assert pixel_at(frame, width, 20, 34) == {0, 0, 0}
+    # Background in quadrants outside the sector sweep.
+    assert pixel_at(frame, width, 24, 16) == {0, 0, 0}
+    assert pixel_at(frame, width, 16, 24) == {0, 0, 0}
+    # Stroke samples on the arc and along the radial edges.
+    assert pixel_at(frame, width, 32, 20) != {0, 0, 0}
+    assert pixel_at(frame, width, 20, 32) != {0, 0, 0}
+    assert pixel_at(frame, width, 26, 20) != {0, 0, 0}
+    assert pixel_at(frame, width, 20, 26) != {0, 0, 0}
+    # Fill sample inside the sector.
+    assert red_pixel?(pixel_at(frame, width, 24, 24))
   end
 
   defp wait_for_frame!(attempts_remaining, predicate) do
