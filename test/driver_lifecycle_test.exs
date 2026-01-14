@@ -1,5 +1,5 @@
 defmodule Scenic.Driver.Skia.DriverLifecycleTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   import Scenic.Primitives
 
