@@ -501,6 +501,193 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
         let opcode = u16::from_be_bytes([op[0], op[1]]);
         rest = remaining;
         match opcode {
+            0x20 => {
+                if rest.len() < 2 {
+                    return Err("begin_path opcode truncated".to_string());
+                }
+                ops.push(ScriptOp::BeginPath);
+                rest = &rest[2..];
+            }
+            0x21 => {
+                if rest.len() < 2 {
+                    return Err("close_path opcode truncated".to_string());
+                }
+                ops.push(ScriptOp::ClosePath);
+                rest = &rest[2..];
+            }
+            0x22 => {
+                if rest.len() < 2 {
+                    return Err("fill_path opcode truncated".to_string());
+                }
+                ops.push(ScriptOp::FillPath);
+                rest = &rest[2..];
+            }
+            0x23 => {
+                if rest.len() < 2 {
+                    return Err("stroke_path opcode truncated".to_string());
+                }
+                ops.push(ScriptOp::StrokePath);
+                rest = &rest[2..];
+            }
+            0x26 => {
+                if rest.len() < 10 {
+                    return Err("move_to opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (x_bytes, tail) = tail.split_at(4);
+                let (y_bytes, tail) = tail.split_at(4);
+                let x = f32::from_bits(u32::from_be_bytes([
+                    x_bytes[0], x_bytes[1], x_bytes[2], x_bytes[3],
+                ]));
+                let y = f32::from_bits(u32::from_be_bytes([
+                    y_bytes[0], y_bytes[1], y_bytes[2], y_bytes[3],
+                ]));
+                ops.push(ScriptOp::MoveTo { x, y });
+                rest = tail;
+            }
+            0x27 => {
+                if rest.len() < 10 {
+                    return Err("line_to opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (x_bytes, tail) = tail.split_at(4);
+                let (y_bytes, tail) = tail.split_at(4);
+                let x = f32::from_bits(u32::from_be_bytes([
+                    x_bytes[0], x_bytes[1], x_bytes[2], x_bytes[3],
+                ]));
+                let y = f32::from_bits(u32::from_be_bytes([
+                    y_bytes[0], y_bytes[1], y_bytes[2], y_bytes[3],
+                ]));
+                ops.push(ScriptOp::LineTo { x, y });
+                rest = tail;
+            }
+            0x28 => {
+                if rest.len() < 22 {
+                    return Err("arc_to opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (x1_bytes, tail) = tail.split_at(4);
+                let (y1_bytes, tail) = tail.split_at(4);
+                let (x2_bytes, tail) = tail.split_at(4);
+                let (y2_bytes, tail) = tail.split_at(4);
+                let (r_bytes, tail) = tail.split_at(4);
+                let x1 = f32::from_bits(u32::from_be_bytes([
+                    x1_bytes[0],
+                    x1_bytes[1],
+                    x1_bytes[2],
+                    x1_bytes[3],
+                ]));
+                let y1 = f32::from_bits(u32::from_be_bytes([
+                    y1_bytes[0],
+                    y1_bytes[1],
+                    y1_bytes[2],
+                    y1_bytes[3],
+                ]));
+                let x2 = f32::from_bits(u32::from_be_bytes([
+                    x2_bytes[0],
+                    x2_bytes[1],
+                    x2_bytes[2],
+                    x2_bytes[3],
+                ]));
+                let y2 = f32::from_bits(u32::from_be_bytes([
+                    y2_bytes[0],
+                    y2_bytes[1],
+                    y2_bytes[2],
+                    y2_bytes[3],
+                ]));
+                let radius = f32::from_bits(u32::from_be_bytes([
+                    r_bytes[0], r_bytes[1], r_bytes[2], r_bytes[3],
+                ]));
+                ops.push(ScriptOp::ArcTo {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    radius,
+                });
+                rest = tail;
+            }
+            0x29 => {
+                if rest.len() < 26 {
+                    return Err("bezier_to opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (cp1x_bytes, tail) = tail.split_at(4);
+                let (cp1y_bytes, tail) = tail.split_at(4);
+                let (cp2x_bytes, tail) = tail.split_at(4);
+                let (cp2y_bytes, tail) = tail.split_at(4);
+                let (x_bytes, tail) = tail.split_at(4);
+                let (y_bytes, tail) = tail.split_at(4);
+                let cp1x = f32::from_bits(u32::from_be_bytes([
+                    cp1x_bytes[0],
+                    cp1x_bytes[1],
+                    cp1x_bytes[2],
+                    cp1x_bytes[3],
+                ]));
+                let cp1y = f32::from_bits(u32::from_be_bytes([
+                    cp1y_bytes[0],
+                    cp1y_bytes[1],
+                    cp1y_bytes[2],
+                    cp1y_bytes[3],
+                ]));
+                let cp2x = f32::from_bits(u32::from_be_bytes([
+                    cp2x_bytes[0],
+                    cp2x_bytes[1],
+                    cp2x_bytes[2],
+                    cp2x_bytes[3],
+                ]));
+                let cp2y = f32::from_bits(u32::from_be_bytes([
+                    cp2y_bytes[0],
+                    cp2y_bytes[1],
+                    cp2y_bytes[2],
+                    cp2y_bytes[3],
+                ]));
+                let x = f32::from_bits(u32::from_be_bytes([
+                    x_bytes[0], x_bytes[1], x_bytes[2], x_bytes[3],
+                ]));
+                let y = f32::from_bits(u32::from_be_bytes([
+                    y_bytes[0], y_bytes[1], y_bytes[2], y_bytes[3],
+                ]));
+                ops.push(ScriptOp::BezierTo {
+                    cp1x,
+                    cp1y,
+                    cp2x,
+                    cp2y,
+                    x,
+                    y,
+                });
+                rest = tail;
+            }
+            0x2A => {
+                if rest.len() < 18 {
+                    return Err("quadratic_to opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (cpx_bytes, tail) = tail.split_at(4);
+                let (cpy_bytes, tail) = tail.split_at(4);
+                let (x_bytes, tail) = tail.split_at(4);
+                let (y_bytes, tail) = tail.split_at(4);
+                let cpx = f32::from_bits(u32::from_be_bytes([
+                    cpx_bytes[0],
+                    cpx_bytes[1],
+                    cpx_bytes[2],
+                    cpx_bytes[3],
+                ]));
+                let cpy = f32::from_bits(u32::from_be_bytes([
+                    cpy_bytes[0],
+                    cpy_bytes[1],
+                    cpy_bytes[2],
+                    cpy_bytes[3],
+                ]));
+                let x = f32::from_bits(u32::from_be_bytes([
+                    x_bytes[0], x_bytes[1], x_bytes[2], x_bytes[3],
+                ]));
+                let y = f32::from_bits(u32::from_be_bytes([
+                    y_bytes[0], y_bytes[1], y_bytes[2], y_bytes[3],
+                ]));
+                ops.push(ScriptOp::QuadraticTo { cpx, cpy, x, y });
+                rest = tail;
+            }
             0x0f => {
                 if rest.len() < 2 {
                     return Err("draw_script opcode truncated".to_string());
@@ -1391,5 +1578,76 @@ mod tests {
                 flag: 0x03
             }]
         );
+    }
+
+    #[test]
+    fn parse_path_ops() {
+        let mut script: Vec<u8> = Vec::new();
+        script.extend_from_slice(&[0x00, 0x20, 0x00, 0x00]);
+        script.extend_from_slice(&[0x00, 0x26, 0x00, 0x00]);
+        push_f32(&mut script, 1.0);
+        push_f32(&mut script, 2.0);
+        script.extend_from_slice(&[0x00, 0x27, 0x00, 0x00]);
+        push_f32(&mut script, 3.0);
+        push_f32(&mut script, 4.0);
+        script.extend_from_slice(&[0x00, 0x28, 0x00, 0x00]);
+        push_f32(&mut script, 5.0);
+        push_f32(&mut script, 6.0);
+        push_f32(&mut script, 7.0);
+        push_f32(&mut script, 8.0);
+        push_f32(&mut script, 9.0);
+        script.extend_from_slice(&[0x00, 0x29, 0x00, 0x00]);
+        push_f32(&mut script, 1.0);
+        push_f32(&mut script, 2.0);
+        push_f32(&mut script, 3.0);
+        push_f32(&mut script, 4.0);
+        push_f32(&mut script, 5.0);
+        push_f32(&mut script, 6.0);
+        script.extend_from_slice(&[0x00, 0x2A, 0x00, 0x00]);
+        push_f32(&mut script, 7.0);
+        push_f32(&mut script, 8.0);
+        push_f32(&mut script, 9.0);
+        push_f32(&mut script, 10.0);
+        script.extend_from_slice(&[0x00, 0x21, 0x00, 0x00]);
+        script.extend_from_slice(&[0x00, 0x22, 0x00, 0x00]);
+        script.extend_from_slice(&[0x00, 0x23, 0x00, 0x00]);
+
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert_eq!(
+            ops,
+            vec![
+                ScriptOp::BeginPath,
+                ScriptOp::MoveTo { x: 1.0, y: 2.0 },
+                ScriptOp::LineTo { x: 3.0, y: 4.0 },
+                ScriptOp::ArcTo {
+                    x1: 5.0,
+                    y1: 6.0,
+                    x2: 7.0,
+                    y2: 8.0,
+                    radius: 9.0
+                },
+                ScriptOp::BezierTo {
+                    cp1x: 1.0,
+                    cp1y: 2.0,
+                    cp2x: 3.0,
+                    cp2y: 4.0,
+                    x: 5.0,
+                    y: 6.0
+                },
+                ScriptOp::QuadraticTo {
+                    cpx: 7.0,
+                    cpy: 8.0,
+                    x: 9.0,
+                    y: 10.0
+                },
+                ScriptOp::ClosePath,
+                ScriptOp::FillPath,
+                ScriptOp::StrokePath
+            ]
+        );
+    }
+
+    fn push_f32(buf: &mut Vec<u8>, value: f32) {
+        buf.extend_from_slice(&value.to_bits().to_be_bytes());
     }
 }

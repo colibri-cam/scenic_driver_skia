@@ -20,10 +20,26 @@ defmodule ScenicDriverSkia.DemoWayland do
       y3 = 840
       label_offset = 160
 
+      path_commands = [
+        :begin,
+        {:move_to, 0, 0},
+        {:line_to, 200, 0},
+        {:arc_to, 200, 60, 140, 60, 24},
+        {:line_to, 140, 120},
+        {:bezier_to, 140, 150, 60, 150, 60, 120},
+        {:line_to, 0, 120},
+        {:quadratic_to, 0, 60, 40, 60},
+        :close_path
+      ]
+
       Scenic.Graph.build(font_size: 20)
       |> rect({200, 120}, fill: :blue, stroke: {3, :white}, translate: {x1, y1})
       |> text("rect", fill: :white, translate: {x1, y1 + label_offset})
-      |> rounded_rectangle({200, 120, 20}, fill: :purple, stroke: {3, :white}, translate: {x2, y1})
+      |> rounded_rectangle({200, 120, 20},
+        fill: :purple,
+        stroke: {3, :white},
+        translate: {x2, y1}
+      )
       |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
       |> script("rrectv_demo", translate: {x3, y1})
       |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
@@ -49,6 +65,12 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> text("arc", fill: :white, translate: {x1, y3 + label_offset})
       |> sector({70, 1.2}, fill: :teal, stroke: {3, :white}, translate: {x2 + 100, y3 + 60})
       |> text("sector", fill: :white, translate: {x2, y3 + label_offset})
+      |> path(path_commands,
+        fill: :maroon,
+        stroke: {3, :white},
+        translate: {x4, y3}
+      )
+      |> text("path", fill: :white, translate: {x4, y3 + label_offset})
       |> text("text", fill: :yellow, font_size: 30, translate: {x3, y3 + 70})
       |> text("text", fill: :white, translate: {x3, y3 + label_offset})
     end

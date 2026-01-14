@@ -12,7 +12,7 @@ Completed:
 - Raster backend validated with raw RGB frame capture; Wayland/DRM share the same render state.
 - Assets module with local fonts + aliases.
 - Script ingestion tests in Rust.
-- Added script ops for `draw_ellipse`, `draw_arc`, `draw_sector`, and `draw_rrectv`.
+- Added script ops for `draw_ellipse`, `draw_arc`, `draw_sector`, `draw_rrectv`, and path primitives (begin/move/line/arc_to/bezier/quadratic/close + fill/stroke).
 
 ## Done
 1. **Input capability plumbing**
@@ -47,11 +47,11 @@ Completed:
 
 ## Next
 1. **Script opcode parity (rendering coverage)**
-   - **Paths & geometry**: add path primitives (begin/move/line/arc_to/bezier/quadratic/close) and `draw_triangle`/`draw_quad`.
+   - **Paths & geometry**: extend path and geometry coverage as new Scenic ops surface.
    - **Paint features**: gradients, image patterns, alpha/opacity, blend modes, stroke caps/joins/dashes.
    - **Images/bitmaps**: implement image draw ops and texture/stream asset handling similar to Scenic local driver `put_texture` flow.
    - **Clipping**: implement clip rect/path and save/restore semantics to match Scenic script behavior.
-   - **Raster coverage**: add per-primitive raster tests that assert translation, background just outside the stroke, stroke edge pixels, and fill pixels where applicable.
+   - **Raster coverage**: expand per-primitive raster tests for upcoming paint, image, and clipping features.
 2. **Asset pipeline completeness**
    - Implement streaming asset updates and caching for images/bitmaps from Scenic assets.
    - Validate font aliasing and fallback behavior with Scenic defaults in `ASSETS.md`.

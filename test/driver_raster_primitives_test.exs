@@ -311,6 +311,98 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule PathScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      commands = [
+        :begin,
+        {:move_to, 0, 0},
+        {:line_to, 20, 0},
+        {:line_to, 20, 20},
+        {:line_to, 0, 20},
+        :close_path
+      ]
+
+      graph =
+        Scenic.Graph.build()
+        |> path(commands,
+          fill: :red,
+          stroke: {2, :white},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
+  defmodule PathArcScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      commands = [
+        :begin,
+        {:move_to, 0, 0},
+        {:arc_to, 20, 0, 20, 20, 10}
+      ]
+
+      graph =
+        Scenic.Graph.build()
+        |> path(commands,
+          stroke: {2, :white},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
+  defmodule PathBezierScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      commands = [
+        :begin,
+        {:move_to, 0, 20},
+        {:bezier_to, 0, 0, 20, 0, 20, 20}
+      ]
+
+      graph =
+        Scenic.Graph.build()
+        |> path(commands,
+          stroke: {2, :white},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
+  defmodule PathQuadraticScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      commands = [
+        :begin,
+        {:move_to, 0, 20},
+        {:quadratic_to, 10, 0, 20, 20}
+      ]
+
+      graph =
+        Scenic.Graph.build()
+        |> path(commands,
+          stroke: {2, :white},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   defmodule StrokeQuadScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -992,6 +1084,109 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 18, 20) == {0, 0, 0}
   end
 
+  test "draw_path fills and strokes expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: PathScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        pixel_at(data, w, 20, 20) == {255, 0, 0} and
+          pixel_at(data, w, 20, 10) == {255, 255, 255}
+      end)
+
+    # Background just outside the translated path bounds.
+    assert pixel_at(frame, width, 7, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 7) == {0, 0, 0}
+    assert pixel_at(frame, width, 33, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 33) == {0, 0, 0}
+    # Stroke samples on each edge.
+    assert pixel_at(frame, width, 20, 10) == {255, 255, 255}
+    assert pixel_at(frame, width, 10, 20) == {255, 255, 255}
+    assert pixel_at(frame, width, 30, 20) == {255, 255, 255}
+    assert pixel_at(frame, width, 20, 30) == {255, 255, 255}
+    # Fill sample inside the path.
+    assert pixel_at(frame, width, 20, 20) == {255, 0, 0}
+  end
+
+  test "draw_path arc_to renders expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: PathArcScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 20..40, 10..30)
+      end)
+
+    # Stroke sample somewhere in the translated arc region.
+    assert any_non_background?(frame, width, 20..40, 10..30)
+  end
+
+  test "draw_path bezier_to renders expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: PathBezierScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 20..40, 20..40)
+      end)
+
+    # Stroke sample somewhere in the translated curve region.
+    assert any_non_background?(frame, width, 20..40, 20..40)
+  end
+
+  test "draw_path quadratic_to renders expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: PathQuadraticScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 20..40, 20..40)
+      end)
+
+    # Stroke sample somewhere in the translated curve region.
+    assert any_non_background?(frame, width, 20..40, 20..40)
+  end
+
   defp wait_for_frame!(renderer, attempts_remaining, predicate) do
     case Native.get_raster_frame(renderer) do
       {:ok, {width, height, frame}} = ok ->
@@ -1023,6 +1218,14 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
       <<_::binary-size(offset), r, g, b, _::binary>> -> {r, g, b}
       _ -> {0, 0, 0}
     end
+  end
+
+  defp any_non_background?(frame, width, x_range, y_range) do
+    Enum.any?(x_range, fn x ->
+      Enum.any?(y_range, fn y ->
+        pixel_at(frame, width, x, y) != {0, 0, 0}
+      end)
+    end)
   end
 
   defp red_pixel?({r, g, b}) do

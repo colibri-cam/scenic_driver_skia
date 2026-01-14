@@ -26,6 +26,39 @@ pub enum ScriptOp {
     FillColor(Color),
     StrokeColor(Color),
     StrokeWidth(f32),
+    BeginPath,
+    ClosePath,
+    FillPath,
+    StrokePath,
+    MoveTo {
+        x: f32,
+        y: f32,
+    },
+    LineTo {
+        x: f32,
+        y: f32,
+    },
+    ArcTo {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        radius: f32,
+    },
+    BezierTo {
+        cp1x: f32,
+        cp1y: f32,
+        cp2x: f32,
+        cp2y: f32,
+        x: f32,
+        y: f32,
+    },
+    QuadraticTo {
+        cpx: f32,
+        cpy: f32,
+        x: f32,
+        y: f32,
+    },
     DrawLine {
         x0: f32,
         y0: f32,
@@ -308,6 +341,69 @@ fn draw_script(
             ScriptOp::FillColor(color) => draw_state.fill_color = *color,
             ScriptOp::StrokeColor(color) => draw_state.stroke_color = *color,
             ScriptOp::StrokeWidth(width) => draw_state.stroke_width = *width,
+            ScriptOp::BeginPath => draw_state.path = Some(PathBuilder::new()),
+            ScriptOp::ClosePath => {
+                if let Some(path) = draw_state.path.as_mut() {
+                    path.close();
+                }
+            }
+            ScriptOp::FillPath => {
+                if let Some(path) = draw_state.path.as_ref() {
+                    let mut paint = Paint::default();
+                    paint.set_style(PaintStyle::Fill);
+                    paint.set_color(draw_state.fill_color);
+                    let mut cloned = path.clone();
+                    canvas.draw_path(&cloned.detach(), &paint);
+                }
+            }
+            ScriptOp::StrokePath => {
+                if let Some(mut path) = draw_state.path.take() {
+                    let mut paint = Paint::default();
+                    paint.set_style(PaintStyle::Stroke);
+                    paint.set_color(draw_state.stroke_color);
+                    paint.set_stroke_width(draw_state.stroke_width);
+                    canvas.draw_path(&path.detach(), &paint);
+                }
+            }
+            ScriptOp::MoveTo { x, y } => {
+                let path = draw_state.path.get_or_insert_with(PathBuilder::new);
+                path.move_to(Point::new(*x, *y));
+            }
+            ScriptOp::LineTo { x, y } => {
+                let path = draw_state.path.get_or_insert_with(PathBuilder::new);
+                path.line_to(Point::new(*x, *y));
+            }
+            ScriptOp::ArcTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                radius,
+            } => {
+                let path = draw_state.path.get_or_insert_with(PathBuilder::new);
+                if !path.is_empty() {
+                    path.arc_to_tangent(Point::new(*x1, *y1), Point::new(*x2, *y2), *radius);
+                }
+            }
+            ScriptOp::BezierTo {
+                cp1x,
+                cp1y,
+                cp2x,
+                cp2y,
+                x,
+                y,
+            } => {
+                let path = draw_state.path.get_or_insert_with(PathBuilder::new);
+                path.cubic_to(
+                    Point::new(*cp1x, *cp1y),
+                    Point::new(*cp2x, *cp2y),
+                    Point::new(*x, *y),
+                );
+            }
+            ScriptOp::QuadraticTo { cpx, cpy, x, y } => {
+                let path = draw_state.path.get_or_insert_with(PathBuilder::new);
+                path.quad_to(Point::new(*cpx, *cpy), Point::new(*x, *y));
+            }
             ScriptOp::DrawLine {
                 x0,
                 y0,
@@ -634,6 +730,7 @@ struct DrawState {
     fill_color: Color,
     stroke_color: Color,
     stroke_width: f32,
+    path: Option<PathBuilder>,
     font_id: Option<String>,
     font_size: f32,
     text_align: TextAlign,
@@ -647,6 +744,7 @@ impl Default for DrawState {
             fill_color: Color::BLACK,
             stroke_color: Color::BLACK,
             stroke_width: 1.0,
+            path: None,
             font_id: None,
             font_size: Self::DEFAULT_FONT_SIZE,
             text_align: TextAlign::Left,
@@ -664,6 +762,7 @@ impl DrawState {
             fill_color: self.fill_color,
             stroke_color: self.stroke_color,
             stroke_width: self.stroke_width,
+            path: self.path.clone(),
             font_id: self.font_id.clone(),
             font_size: self.font_size,
             text_align: self.text_align,
@@ -690,6 +789,7 @@ impl DrawState {
         self.fill_color = snapshot.fill_color;
         self.stroke_color = snapshot.stroke_color;
         self.stroke_width = snapshot.stroke_width;
+        self.path = snapshot.path;
         self.font_id = snapshot.font_id;
         self.font_size = snapshot.font_size;
         self.text_align = snapshot.text_align;
@@ -719,6 +819,7 @@ struct DrawStateSnapshot {
     fill_color: Color,
     stroke_color: Color,
     stroke_width: f32,
+    path: Option<PathBuilder>,
     font_id: Option<String>,
     font_size: f32,
     text_align: TextAlign,
@@ -731,6 +832,7 @@ impl Default for DrawStateSnapshot {
             fill_color: Color::BLACK,
             stroke_color: Color::BLACK,
             stroke_width: 1.0,
+            path: None,
             font_id: None,
             font_size: DrawState::DEFAULT_FONT_SIZE,
             text_align: TextAlign::Left,
