@@ -14,6 +14,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       x1 = 80
       x2 = 700
       x3 = 1320
+      x4 = 1940
       y1 = 80
       y2 = 460
       y3 = 840
@@ -32,6 +33,12 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> text("circle", fill: :white, translate: {x2, y2 + label_offset})
       |> ellipse({70, 45}, fill: :orange, stroke: {3, :white}, translate: {x3 + 100, y2 + 60})
       |> text("ellipse", fill: :white, translate: {x3, y2 + label_offset})
+      |> triangle({{0, 120}, {100, 0}, {200, 120}},
+        fill: :pink,
+        stroke: {3, :white},
+        translate: {x4, y2}
+      )
+      |> text("triangle", fill: :white, translate: {x4, y2 + label_offset})
       |> arc({70, 1.6}, stroke: {6, :white}, translate: {x1 + 100, y3 + 60})
       |> text("arc", fill: :white, translate: {x1, y3 + label_offset})
       |> sector({70, 1.2}, fill: :teal, stroke: {3, :white}, translate: {x2 + 100, y3 + 60})
