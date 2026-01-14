@@ -94,6 +94,23 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule TriangleScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> triangle({{0, 0}, {20, 0}, {0, 20}},
+          fill: :red,
+          stroke: {2, :white},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   test "draw_rect fills expected pixels" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -262,6 +279,41 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 20, 12) != {0, 0, 0}
     # Fill sample at the center.
     assert pixel_at(frame, width, 20, 20) == {255, 0, 0}
+  end
+
+  test "draw_triangle fills expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: TriangleScene)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop()
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(40, fn {w, _h, data} ->
+        pixel_at(data, w, 15, 15) == {255, 0, 0} and
+          pixel_at(data, w, 22, 18) != {0, 0, 0} and
+          pixel_at(data, w, 25, 25) == {0, 0, 0}
+      end)
+
+    # Background just outside the translated triangle bounds.
+    assert pixel_at(frame, width, 7, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 7) == {0, 0, 0}
+    assert pixel_at(frame, width, 33, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 33) == {0, 0, 0}
+    # Background inside the bounding box but outside the triangle fill.
+    assert pixel_at(frame, width, 25, 25) == {0, 0, 0}
+    # Stroke samples along the two legs and the hypotenuse.
+    assert pixel_at(frame, width, 14, 10) == {255, 255, 255}
+    assert pixel_at(frame, width, 10, 14) == {255, 255, 255}
+    assert pixel_at(frame, width, 22, 18) != {0, 0, 0}
+    # Fill sample inside the triangle.
+    assert pixel_at(frame, width, 15, 15) == {255, 0, 0}
   end
 
   defp wait_for_frame!(attempts_remaining, predicate) do
