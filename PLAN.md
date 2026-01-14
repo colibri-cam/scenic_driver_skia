@@ -15,6 +15,8 @@ Completed:
 - Added script ops for `draw_ellipse`, `draw_arc`, `draw_sector`, `draw_rrectv`, and path primitives (begin/move/line/arc_to/bezier/quadratic/close + fill/stroke + scissor).
 - Added stroke cap/join/miter_limit support for raster/Wayland/DRM.
 - Added linear gradient fill/stroke paint support.
+- Added radial gradient fill/stroke paint support.
+- Added static image and stream paint support.
 
 ## Done
 1. **Input capability plumbing**
@@ -51,7 +53,7 @@ Completed:
 1. **Script opcode parity (rendering coverage)**
    - **Paths & geometry**: extend path and geometry coverage as new Scenic ops surface.
    - **Paint features**: image patterns, alpha/opacity, blend modes, stroke dashes.
-   - **Images/bitmaps**: implement image draw ops and texture/stream asset handling similar to Scenic local driver `put_texture` flow.
+   - **Images/bitmaps**: implement sprite draw ops and texture/stream asset handling for sprites.
    - **Clipping**: implement clip rect/path and save/restore semantics to match Scenic script behavior.
    - **Raster coverage**: expand per-primitive raster tests for upcoming paint, image, and clipping features.
 2. **Asset pipeline completeness**

@@ -370,6 +370,40 @@ pub fn submit_scripts(
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
+pub fn put_static_image(
+    renderer: ResourceArc<RendererResource>,
+    id: String,
+    data: rustler::Binary,
+) -> Result<(), String> {
+    let image = renderer::decode_texture_image("file", 0, 0, data.as_slice())?;
+    renderer::insert_static_image(&id, image);
+    with_handle(&renderer, signal_redraw)
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn put_stream_texture(
+    renderer: ResourceArc<RendererResource>,
+    id: String,
+    format: String,
+    width: u32,
+    height: u32,
+    data: rustler::Binary,
+) -> Result<(), String> {
+    let image = renderer::decode_texture_image(&format, width, height, data.as_slice())?;
+    renderer::insert_stream_image(&id, image);
+    with_handle(&renderer, signal_redraw)
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+pub fn del_stream_texture(
+    renderer: ResourceArc<RendererResource>,
+    id: String,
+) -> Result<(), String> {
+    renderer::remove_stream_image(&id);
+    with_handle(&renderer, signal_redraw)
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn del_script(renderer: ResourceArc<RendererResource>, id: String) -> Result<(), String> {
     update_render_state(&renderer, |state| {
         state.scripts.remove(&id);
@@ -804,6 +838,91 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                     end_color,
                 });
                 rest = tail;
+            }
+            0x62 => {
+                if rest.len() < 26 {
+                    return Err("fill_radial opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (center_x_bytes, tail) = tail.split_at(4);
+                let (center_y_bytes, tail) = tail.split_at(4);
+                let (inner_bytes, tail) = tail.split_at(4);
+                let (outer_bytes, tail) = tail.split_at(4);
+                let (start_rgba, tail) = tail.split_at(4);
+                let (end_rgba, tail) = tail.split_at(4);
+                let center_x = f32::from_bits(u32::from_be_bytes([
+                    center_x_bytes[0],
+                    center_x_bytes[1],
+                    center_x_bytes[2],
+                    center_x_bytes[3],
+                ]));
+                let center_y = f32::from_bits(u32::from_be_bytes([
+                    center_y_bytes[0],
+                    center_y_bytes[1],
+                    center_y_bytes[2],
+                    center_y_bytes[3],
+                ]));
+                let inner_radius = f32::from_bits(u32::from_be_bytes([
+                    inner_bytes[0],
+                    inner_bytes[1],
+                    inner_bytes[2],
+                    inner_bytes[3],
+                ]));
+                let outer_radius = f32::from_bits(u32::from_be_bytes([
+                    outer_bytes[0],
+                    outer_bytes[1],
+                    outer_bytes[2],
+                    outer_bytes[3],
+                ]));
+                let start_color = skia_safe::Color::from_argb(
+                    start_rgba[3],
+                    start_rgba[0],
+                    start_rgba[1],
+                    start_rgba[2],
+                );
+                let end_color =
+                    skia_safe::Color::from_argb(end_rgba[3], end_rgba[0], end_rgba[1], end_rgba[2]);
+                ops.push(ScriptOp::FillRadial {
+                    center_x,
+                    center_y,
+                    inner_radius,
+                    outer_radius,
+                    start_color,
+                    end_color,
+                });
+                rest = tail;
+            }
+            0x63 => {
+                if rest.len() < 2 {
+                    return Err("fill_image opcode truncated".to_string());
+                }
+                let (len_bytes, tail) = rest.split_at(2);
+                let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]) as usize;
+                let pad = (4 - (len % 4)) % 4;
+                let total = len + pad;
+                if tail.len() < total {
+                    return Err("fill_image payload truncated".to_string());
+                }
+                let (id_bytes, tail) = tail.split_at(len);
+                let id = String::from_utf8_lossy(id_bytes).to_string();
+                ops.push(ScriptOp::FillImage(id));
+                rest = &tail[pad..];
+            }
+            0x64 => {
+                if rest.len() < 2 {
+                    return Err("fill_stream opcode truncated".to_string());
+                }
+                let (len_bytes, tail) = rest.split_at(2);
+                let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]) as usize;
+                let pad = (4 - (len % 4)) % 4;
+                let total = len + pad;
+                if tail.len() < total {
+                    return Err("fill_stream payload truncated".to_string());
+                }
+                let (id_bytes, tail) = tail.split_at(len);
+                let id = String::from_utf8_lossy(id_bytes).to_string();
+                ops.push(ScriptOp::FillStream(id));
+                rest = &tail[pad..];
             }
             0x50 => {
                 if rest.len() < 26 {
@@ -1340,6 +1459,91 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                     end_color,
                 });
                 rest = tail;
+            }
+            0x73 => {
+                if rest.len() < 26 {
+                    return Err("stroke_radial opcode truncated".to_string());
+                }
+                let (_reserved, tail) = rest.split_at(2);
+                let (center_x_bytes, tail) = tail.split_at(4);
+                let (center_y_bytes, tail) = tail.split_at(4);
+                let (inner_bytes, tail) = tail.split_at(4);
+                let (outer_bytes, tail) = tail.split_at(4);
+                let (start_rgba, tail) = tail.split_at(4);
+                let (end_rgba, tail) = tail.split_at(4);
+                let center_x = f32::from_bits(u32::from_be_bytes([
+                    center_x_bytes[0],
+                    center_x_bytes[1],
+                    center_x_bytes[2],
+                    center_x_bytes[3],
+                ]));
+                let center_y = f32::from_bits(u32::from_be_bytes([
+                    center_y_bytes[0],
+                    center_y_bytes[1],
+                    center_y_bytes[2],
+                    center_y_bytes[3],
+                ]));
+                let inner_radius = f32::from_bits(u32::from_be_bytes([
+                    inner_bytes[0],
+                    inner_bytes[1],
+                    inner_bytes[2],
+                    inner_bytes[3],
+                ]));
+                let outer_radius = f32::from_bits(u32::from_be_bytes([
+                    outer_bytes[0],
+                    outer_bytes[1],
+                    outer_bytes[2],
+                    outer_bytes[3],
+                ]));
+                let start_color = skia_safe::Color::from_argb(
+                    start_rgba[3],
+                    start_rgba[0],
+                    start_rgba[1],
+                    start_rgba[2],
+                );
+                let end_color =
+                    skia_safe::Color::from_argb(end_rgba[3], end_rgba[0], end_rgba[1], end_rgba[2]);
+                ops.push(ScriptOp::StrokeRadial {
+                    center_x,
+                    center_y,
+                    inner_radius,
+                    outer_radius,
+                    start_color,
+                    end_color,
+                });
+                rest = tail;
+            }
+            0x74 => {
+                if rest.len() < 2 {
+                    return Err("stroke_image opcode truncated".to_string());
+                }
+                let (len_bytes, tail) = rest.split_at(2);
+                let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]) as usize;
+                let pad = (4 - (len % 4)) % 4;
+                let total = len + pad;
+                if tail.len() < total {
+                    return Err("stroke_image payload truncated".to_string());
+                }
+                let (id_bytes, tail) = tail.split_at(len);
+                let id = String::from_utf8_lossy(id_bytes).to_string();
+                ops.push(ScriptOp::StrokeImage(id));
+                rest = &tail[pad..];
+            }
+            0x75 => {
+                if rest.len() < 2 {
+                    return Err("stroke_stream opcode truncated".to_string());
+                }
+                let (len_bytes, tail) = rest.split_at(2);
+                let len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]) as usize;
+                let pad = (4 - (len % 4)) % 4;
+                let total = len + pad;
+                if tail.len() < total {
+                    return Err("stroke_stream payload truncated".to_string());
+                }
+                let (id_bytes, tail) = tail.split_at(len);
+                let id = String::from_utf8_lossy(id_bytes).to_string();
+                ops.push(ScriptOp::StrokeStream(id));
+                rest = &tail[pad..];
             }
             0x80 => {
                 if rest.len() < 2 {

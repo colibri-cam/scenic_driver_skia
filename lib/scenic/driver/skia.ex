@@ -19,6 +19,7 @@ defmodule Scenic.Driver.Skia do
   alias Scenic.Driver
 
   alias Scenic.Driver.Skia.Native
+  alias Scenic.Assets.Stream
   alias Scenic.{Script, ViewPort}
 
   @window_schema [
@@ -88,7 +89,8 @@ defmodule Scenic.Driver.Skia do
            opts: opts,
            update_count: 0,
            input_mask: 0,
-           renderer: renderer
+           renderer: renderer,
+           media: %{images: [], streams: []}
          )}
 
       {:error, reason} ->
@@ -154,6 +156,19 @@ defmodule Scenic.Driver.Skia do
   end
 
   @impl GenServer
+  def handle_info({{Stream, :put}, _type, id}, driver) do
+    driver = put_stream_asset(id, driver)
+    {:noreply, driver}
+  end
+
+  @impl GenServer
+  def handle_info({{Stream, :delete}, _type, id}, driver) do
+    _ = Native.del_stream_texture(driver.assigns.renderer, id)
+    driver = drop_stream(id, driver)
+    {:noreply, driver}
+  end
+
+  @impl GenServer
   def handle_call(:renderer_handle, _from, driver) do
     {:reply, driver.assigns.renderer, driver}
   end
@@ -162,19 +177,21 @@ defmodule Scenic.Driver.Skia do
   def update_scene(script_ids, %{viewport: vp} = driver) do
     Logger.debug("Scenic.Driver.Skia update_scene: #{inspect(script_ids)}")
 
-    updates =
-      Enum.reduce(script_ids, [], fn id, acc ->
+    {updates, driver} =
+      Enum.reduce(script_ids, {[], driver}, fn id, {acc, driver} ->
         case ViewPort.get_script(vp, id) do
           {:ok, script} ->
+            driver = ensure_media(script, driver)
+
             binary =
               script
               |> Script.serialize()
               |> IO.iodata_to_binary()
 
-            [{to_string(id), binary} | acc]
+            {[{to_string(id), binary} | acc], driver}
 
           _ ->
-            acc
+            {acc, driver}
         end
       end)
 
@@ -215,6 +232,87 @@ defmodule Scenic.Driver.Skia do
     {:color_rgba, {r, g, b, a}} = Scenic.Color.to_rgba(color)
     _ = Native.set_clear_color(driver.assigns.renderer, {r, g, b, a})
     {:ok, driver}
+  end
+
+  defp ensure_media(script, driver) do
+    media = Script.media(script)
+
+    driver
+    |> ensure_images(Map.get(media, :images, []))
+    |> ensure_streams(Map.get(media, :streams, []))
+  end
+
+  defp ensure_images(driver, []), do: driver
+
+  defp ensure_images(%{assigns: %{renderer: renderer, media: media}} = driver, ids) do
+    images = Map.get(media, :images, [])
+
+    images =
+      Enum.reduce(ids, images, fn id, images ->
+        with false <- Enum.member?(images, id),
+             {:ok, bin} <- read_asset_binary(id) do
+          _ = Native.put_static_image(renderer, id, bin)
+          [id | images]
+        else
+          _ -> images
+        end
+      end)
+
+    assign(driver, :media, Map.put(media, :images, images))
+  end
+
+  defp ensure_streams(driver, []), do: driver
+
+  defp ensure_streams(%{assigns: %{media: media}} = driver, ids) do
+    streams = Map.get(media, :streams, [])
+
+    streams =
+      Enum.reduce(ids, streams, fn id, streams ->
+        with false <- Enum.member?(streams, id),
+             :ok <- Stream.subscribe(id) do
+          _ = put_stream_asset(id, driver)
+          [id | streams]
+        else
+          _ -> streams
+        end
+      end)
+
+    assign(driver, :media, Map.put(media, :streams, streams))
+  end
+
+  defp put_stream_asset(id, %{assigns: %{renderer: renderer}} = driver) do
+    case Stream.fetch(id) do
+      {:ok, {Stream.Image, {w, h, _format}, bin}} ->
+        _ = put_stream_texture(renderer, id, "file", w, h, bin)
+
+      {:ok, {Stream.Bitmap, {w, h, format}, bin}} ->
+        _ = put_stream_texture(renderer, id, Atom.to_string(format), w, h, bin)
+
+      _ ->
+        :ok
+    end
+
+    driver
+  end
+
+  defp put_stream_texture(renderer, id, format, width, height, bin) do
+    case Native.put_stream_texture(renderer, id, format, width, height, bin) do
+      :ok -> :ok
+      {:ok, _} -> :ok
+      {:error, reason} -> Logger.warning("put_stream_texture failed: #{inspect(reason)}")
+      other -> Logger.warning("put_stream_texture returned #{inspect(other)}")
+    end
+  end
+
+  defp drop_stream(id, %{assigns: %{media: media}} = driver) do
+    streams = List.delete(Map.get(media, :streams, []), id)
+    assign(driver, :media, Map.put(media, :streams, streams))
+  end
+
+  defp read_asset_binary(id) do
+    app_priv = :code.priv_dir(:scenic_driver_skia) |> to_string()
+    path = Path.join([app_priv, "__scenic", "assets", id])
+    File.read(path)
   end
 
   @impl GenServer

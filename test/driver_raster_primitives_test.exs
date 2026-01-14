@@ -452,6 +452,22 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule RadialGradientScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> rect({20, 20},
+          fill: {:radial, {10, 10, 0, 10, :red, :blue}},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   defmodule LinearStrokeScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -462,6 +478,38 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
         |> line({{0, 0}, {20, 0}},
           stroke: {6, {:linear, {0, 0, 20, 0, :red, :blue}}},
           translate: {10, 20}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
+  defmodule ImageFillScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> rect({20, 20},
+          fill: {:image, :test_red},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
+  defmodule StreamFillScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, stream_id, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> rect({20, 20},
+          fill: {:stream, stream_id},
+          translate: {10, 10}
         )
 
       {:ok, Scenic.Scene.push_graph(scene, graph)}
@@ -1350,6 +1398,32 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert blue_dominant?(pixel_at(frame, width, 28, 20))
   end
 
+  test "radial gradient fill transitions across the rect" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: RadialGradientScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        red_dominant?(pixel_at(data, w, 20, 20)) and
+          blue_dominant?(pixel_at(data, w, 28, 20))
+      end)
+
+    # Center stays closer to red.
+    assert red_dominant?(pixel_at(frame, width, 20, 20))
+    # Edge of the rect shifts towards blue.
+    assert blue_dominant?(pixel_at(frame, width, 28, 20))
+  end
+
   test "linear gradient stroke transitions across the line" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -1376,6 +1450,66 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert blue_dominant?(pixel_at(frame, width, 28, 20))
   end
 
+  test "image fill repeats across the rect" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: ImageFillScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        red_pixel?(pixel_at(data, w, 15, 15))
+      end)
+
+    # Image fill should render the red pixel.
+    assert red_pixel?(pixel_at(frame, width, 15, 15))
+  end
+
+  test "stream fill renders provided bitmap" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    :ok = ensure_stream_started()
+    stream_id = "raster_stream_#{System.unique_integer([:positive])}"
+    bitmap = Scenic.Assets.Stream.Bitmap.build(:rgb, 2, 2, clear: :green, commit: true)
+    :ok = Scenic.Assets.Stream.put(stream_id, bitmap)
+    assert {:ok, _} = Scenic.Assets.Stream.fetch(stream_id)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: {StreamFillScene, stream_id})
+    renderer = ViewPortHelper.renderer(vp)
+    {Scenic.Assets.Stream.Bitmap, {w, h, format}, bin} = bitmap
+
+    :ok =
+      normalize_nif_result(
+        Native.put_stream_texture(renderer, stream_id, Atom.to_string(format), w, h, bin)
+      )
+
+    on_exit(fn ->
+      Scenic.Assets.Stream.delete(stream_id)
+
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 12..28, 12..28)
+      end)
+
+    # Stream fill should render within the rect bounds.
+    assert any_non_background?(frame, width, 12..28, 12..28)
+  end
+
   test "cap square extends farther than butt" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -1392,14 +1526,16 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
 
     {width, _height, frame} =
       wait_for_frame!(renderer, 40, fn {w, _h, data} ->
-        any_non_background?(data, w, 20..30, 16..24) and
-          any_non_background?(data, w, 20..30, 36..44)
+        any_non_background?(data, w, 10..30, 16..24) and
+          any_non_background?(data, w, 10..30, 36..44)
       end)
 
-    butt_count = count_non_background?(frame, width, 34..36, 16..24)
-    square_count = count_non_background?(frame, width, 34..36, 36..44)
+    butt_sample = pixel_at(frame, width, 34, 20)
+    square_sample = pixel_at(frame, width, 34, 40)
 
-    assert square_count > butt_count
+    # Square cap extends beyond the butt cap at the same x offset.
+    assert butt_sample == {0, 0, 0}
+    assert square_sample != {0, 0, 0}
   end
 
   defp wait_for_frame!(renderer, attempts_remaining, predicate) do
@@ -1443,18 +1579,24 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end)
   end
 
-  defp count_non_background?(frame, width, x_range, y_range) do
-    Enum.reduce(x_range, 0, fn x, acc ->
-      acc +
-        Enum.count(y_range, fn y ->
-          pixel_at(frame, width, x, y) != {0, 0, 0}
-        end)
-    end)
-  end
-
   defp red_pixel?({r, g, b}) do
     r > 200 and g < 80 and b < 80
   end
+
+  defp ensure_stream_started do
+    case Scenic.Assets.Stream.start_link(nil) do
+      {:ok, pid} ->
+        Process.unlink(pid)
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+    end
+  end
+
+  defp normalize_nif_result(:ok), do: :ok
+  defp normalize_nif_result({:ok, _}), do: :ok
+  defp normalize_nif_result(other), do: other
 
   defp red_channel_in_range?({r, _g, _b}, min, max), do: r >= min and r <= max
 

@@ -4,6 +4,8 @@ defmodule Scenic.Driver.Skia.Assets do
     sources: ["assets", {:scenic, "assets"}],
     aliases: [
       roboto: "fonts/roboto.ttf",
-      roboto_mono: "fonts/roboto_mono.ttf"
+      roboto_mono: "fonts/roboto_mono.ttf",
+      test_red: "images/test_red.png",
+      stock: "images/stock.jpg"
     ]
 end

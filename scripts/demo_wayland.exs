@@ -28,10 +28,11 @@ defmodule ScenicDriverSkia.DemoWayland do
     end
 
     defp build_graph(join_miter_limit) do
-      x1 = 80
-      x2 = 700
-      x3 = 1320
-      x4 = 1940
+      x1 = 60
+      x2 = 470
+      x3 = 880
+      x4 = 1290
+      x5 = 1700
       y1 = 60
       y2 = 320
       y3 = 580
@@ -61,6 +62,11 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
       |> script("rrectv_demo", translate: {x3, y1})
       |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
+      |> rect({200, 120},
+        fill: {:radial, {100, 60, 0, 80, :red, :blue}},
+        translate: {x5, y1}
+      )
+      |> text("radial gradient", fill: :white, translate: {x5, y1 + label_offset})
       |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :butt, translate: {x1, y2})
       |> text("cap: butt", fill: :white, translate: {x1, y2 + 30})
       |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :round, translate: {x1, y2 + 50})
@@ -96,6 +102,11 @@ defmodule ScenicDriverSkia.DemoWayland do
       )
       |> text("path", fill: :white, translate: {x4, y3 + label_offset})
       |> rect({200, 120},
+        fill: {:image, :stock},
+        translate: {x5, y3}
+      )
+      |> text("image", fill: :white, translate: {x5, y3 + label_offset})
+      |> rect({200, 120},
         fill: :red,
         scissor: {120, 60},
         translate: {x1, y4}
@@ -116,6 +127,11 @@ defmodule ScenicDriverSkia.DemoWayland do
         translate: {x3, y4 + 150}
       )
       |> text("linear gradient", fill: :white, translate: {x3, y4 + 240})
+      |> rect({200, 120},
+        fill: {:stream, "demo_stream"},
+        translate: {x5, y4}
+      )
+      |> text("stream", fill: :white, translate: {x5, y4 + label_offset})
       |> path(
         [
           :begin,
@@ -180,6 +196,10 @@ defmodule ScenicDriverSkia.DemoWayland do
 
   def run do
     {:ok, _} = DynamicSupervisor.start_link(name: :scenic_viewports, strategy: :one_for_one)
+    {:ok, stream_pid} = Scenic.Assets.Stream.start_link(nil)
+    Process.unlink(stream_pid)
+    :ok = Scenic.Assets.Stream.put("demo_stream", build_stream_bitmap(:green))
+    :timer.send_interval(750, self(), :stream_tick)
 
     {:ok, _vp} =
       Scenic.ViewPort.start(
@@ -196,7 +216,30 @@ defmodule ScenicDriverSkia.DemoWayland do
         ]
       )
 
-    Process.sleep(:infinity)
+    stream_loop()
+  end
+
+  defp stream_loop do
+    receive do
+      :stream_tick ->
+        color =
+          case Process.get(:stream_color, :green) do
+            :green ->
+              Process.put(:stream_color, :magenta)
+              :magenta
+
+            _ ->
+              Process.put(:stream_color, :green)
+              :green
+          end
+
+        :ok = Scenic.Assets.Stream.put("demo_stream", build_stream_bitmap(color))
+        stream_loop()
+    end
+  end
+
+  defp build_stream_bitmap(color) do
+    Scenic.Assets.Stream.Bitmap.build(:rgb, 16, 16, clear: color, commit: true)
   end
 end
 

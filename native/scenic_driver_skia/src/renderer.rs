@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use skia_safe::{
-    ClipOp, Color, ColorType, Font, FontMgr, FontStyle, Matrix, Paint, PaintCap, PaintJoin,
-    PaintStyle, PathBuilder, Point, RRect, Rect, Shader, Surface, TileMode, Typeface, Vector,
+    AlphaType, ClipOp, Color, ColorType, Data, Font, FontMgr, FontStyle, Image, ImageInfo, Matrix,
+    Paint, PaintCap, PaintJoin, PaintStyle, PathBuilder, Point, RRect, Rect, SamplingOptions,
+    Shader, Surface, TileMode, Typeface, Vector,
     gpu::{self, SurfaceOrigin, backend_render_targets, gl::FramebufferInfo},
+    images,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,6 +36,14 @@ pub enum ScriptOp {
         start_color: Color,
         end_color: Color,
     },
+    FillRadial {
+        center_x: f32,
+        center_y: f32,
+        inner_radius: f32,
+        outer_radius: f32,
+        start_color: Color,
+        end_color: Color,
+    },
     StrokeLinear {
         start_x: f32,
         start_y: f32,
@@ -42,6 +52,18 @@ pub enum ScriptOp {
         start_color: Color,
         end_color: Color,
     },
+    StrokeRadial {
+        center_x: f32,
+        center_y: f32,
+        inner_radius: f32,
+        outer_radius: f32,
+        start_color: Color,
+        end_color: Color,
+    },
+    FillImage(String),
+    FillStream(String),
+    StrokeImage(String),
+    StrokeStream(String),
     StrokeCap(PaintCap),
     StrokeJoin(PaintJoin),
     StrokeMiterLimit(f32),
@@ -162,6 +184,9 @@ pub struct RenderState {
     pub scripts: HashMap<String, Vec<ScriptOp>>,
     pub root_id: Option<String>,
 }
+
+static IMAGE_CACHE: OnceLock<Mutex<HashMap<String, Image>>> = OnceLock::new();
+static STREAM_CACHE: OnceLock<Mutex<HashMap<String, Image>>> = OnceLock::new();
 
 impl Default for RenderState {
     fn default() -> Self {
@@ -389,6 +414,24 @@ fn draw_script(
                     None,
                 );
             }
+            ScriptOp::FillRadial {
+                center_x,
+                center_y,
+                inner_radius,
+                outer_radius,
+                start_color,
+                end_color,
+            } => {
+                draw_state.fill_color = *start_color;
+                let colors = [*start_color, *end_color];
+                draw_state.fill_shader = radial_shader(
+                    *center_x,
+                    *center_y,
+                    *inner_radius,
+                    *outer_radius,
+                    colors.as_slice(),
+                );
+            }
             ScriptOp::StrokeLinear {
                 start_x,
                 start_y,
@@ -407,6 +450,36 @@ fn draw_script(
                     None,
                     None,
                 );
+            }
+            ScriptOp::StrokeRadial {
+                center_x,
+                center_y,
+                inner_radius,
+                outer_radius,
+                start_color,
+                end_color,
+            } => {
+                draw_state.stroke_color = *start_color;
+                let colors = [*start_color, *end_color];
+                draw_state.stroke_shader = radial_shader(
+                    *center_x,
+                    *center_y,
+                    *inner_radius,
+                    *outer_radius,
+                    colors.as_slice(),
+                );
+            }
+            ScriptOp::FillImage(id) => {
+                set_fill_image_shader(draw_state, load_static_shader(id.as_str()));
+            }
+            ScriptOp::FillStream(id) => {
+                set_fill_image_shader(draw_state, load_stream_shader(id.as_str()));
+            }
+            ScriptOp::StrokeImage(id) => {
+                set_stroke_image_shader(draw_state, load_static_shader(id.as_str()));
+            }
+            ScriptOp::StrokeStream(id) => {
+                set_stroke_image_shader(draw_state, load_stream_shader(id.as_str()));
             }
             ScriptOp::StrokeCap(cap) => draw_state.stroke_cap = *cap,
             ScriptOp::StrokeJoin(join) => draw_state.stroke_join = *join,
@@ -736,6 +809,26 @@ fn apply_stroke_paint(paint: &mut Paint, draw_state: &DrawState) {
     }
 }
 
+fn set_fill_image_shader(draw_state: &mut DrawState, shader: Option<Shader>) {
+    if let Some(shader) = shader {
+        draw_state.fill_shader = Some(shader);
+        draw_state.fill_color = Color::WHITE;
+    } else {
+        draw_state.fill_shader = None;
+        draw_state.fill_color = Color::TRANSPARENT;
+    }
+}
+
+fn set_stroke_image_shader(draw_state: &mut DrawState, shader: Option<Shader>) {
+    if let Some(shader) = shader {
+        draw_state.stroke_shader = Some(shader);
+        draw_state.stroke_color = Color::WHITE;
+    } else {
+        draw_state.stroke_shader = None;
+        draw_state.stroke_color = Color::TRANSPARENT;
+    }
+}
+
 fn default_font(size: f32) -> Option<Font> {
     static DEFAULT_TYPEFACE: OnceLock<Option<Typeface>> = OnceLock::new();
     let typeface = DEFAULT_TYPEFACE
@@ -777,6 +870,188 @@ fn typeface_from_asset(font_id: &str) -> Option<Typeface> {
     }
 
     Some(typeface)
+}
+
+fn load_static_shader(id: &str) -> Option<Shader> {
+    cached_static_image(id).and_then(|image| image_to_shader(&image))
+}
+
+fn load_stream_shader(id: &str) -> Option<Shader> {
+    cached_stream_image(id).and_then(|image| image_to_shader(&image))
+}
+
+fn image_to_shader(image: &Image) -> Option<Shader> {
+    image.to_shader(
+        Some((TileMode::Repeat, TileMode::Repeat)),
+        SamplingOptions::default(),
+        None,
+    )
+}
+
+fn radial_shader(
+    center_x: f32,
+    center_y: f32,
+    inner_radius: f32,
+    outer_radius: f32,
+    colors: &[Color],
+) -> Option<Shader> {
+    if inner_radius <= 0.0 {
+        Shader::radial_gradient(
+            Point::new(center_x, center_y),
+            outer_radius,
+            colors,
+            None,
+            TileMode::Clamp,
+            None,
+            None,
+        )
+    } else {
+        Shader::two_point_conical_gradient(
+            Point::new(center_x, center_y),
+            inner_radius,
+            Point::new(center_x, center_y),
+            outer_radius,
+            colors,
+            None,
+            TileMode::Clamp,
+            None,
+            None,
+        )
+    }
+}
+
+fn cached_static_image(id: &str) -> Option<Image> {
+    let cache = IMAGE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(cache) = cache.lock()
+        && let Some(image) = cache.get(id)
+    {
+        return Some(image.clone());
+    }
+
+    let bytes = read_asset_bytes(id)?;
+    let image = Image::from_encoded(Data::new_copy(&bytes))?;
+
+    if let Ok(mut cache) = cache.lock() {
+        cache.insert(id.to_string(), image.clone());
+    }
+
+    Some(image)
+}
+
+fn cached_stream_image(id: &str) -> Option<Image> {
+    let cache = STREAM_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(cache) = cache.lock()
+        && let Some(image) = cache.get(id)
+    {
+        return Some(image.clone());
+    }
+
+    None
+}
+
+fn read_asset_bytes(asset_id: &str) -> Option<Vec<u8>> {
+    let mut path = std::env::current_dir().ok()?;
+    path.push("priv");
+    path.push("__scenic");
+    path.push("assets");
+    path.push(asset_id);
+    std::fs::read(path).ok()
+}
+
+pub fn insert_static_image(id: &str, image: Image) {
+    let cache = IMAGE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(mut cache) = cache.lock() {
+        cache.insert(id.to_string(), image);
+    }
+}
+
+pub fn insert_stream_image(id: &str, image: Image) {
+    let cache = STREAM_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(mut cache) = cache.lock() {
+        cache.insert(id.to_string(), image);
+    }
+}
+
+pub fn remove_stream_image(id: &str) {
+    let cache = STREAM_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(mut cache) = cache.lock() {
+        cache.remove(id);
+    }
+}
+
+pub fn decode_texture_image(
+    format: &str,
+    width: u32,
+    height: u32,
+    data: &[u8],
+) -> Result<Image, String> {
+    if format == "file" {
+        return Image::from_encoded(Data::new_copy(data))
+            .ok_or_else(|| "failed to decode image data".to_string());
+    }
+
+    let pixel_count = width
+        .checked_mul(height)
+        .ok_or_else(|| "texture dimensions overflow".to_string())?;
+    let pixel_count = pixel_count as usize;
+
+    let rgba = match format {
+        "g" => {
+            if data.len() != pixel_count {
+                return Err("gray bitmap size mismatch".to_string());
+            }
+            let mut rgba = Vec::with_capacity(pixel_count * 4);
+            for &g in data {
+                rgba.extend_from_slice(&[g, g, g, 0xFF]);
+            }
+            rgba
+        }
+        "ga" => {
+            if data.len() != pixel_count * 2 {
+                return Err("ga bitmap size mismatch".to_string());
+            }
+            let mut rgba = Vec::with_capacity(pixel_count * 4);
+            for chunk in data.chunks_exact(2) {
+                let g = chunk[0];
+                let a = chunk[1];
+                rgba.extend_from_slice(&[g, g, g, a]);
+            }
+            rgba
+        }
+        "rgb" => {
+            if data.len() != pixel_count * 3 {
+                return Err("rgb bitmap size mismatch".to_string());
+            }
+            let mut rgba = Vec::with_capacity(pixel_count * 4);
+            for chunk in data.chunks_exact(3) {
+                rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 0xFF]);
+            }
+            rgba
+        }
+        "rgba" => {
+            if data.len() != pixel_count * 4 {
+                return Err("rgba bitmap size mismatch".to_string());
+            }
+            data.to_vec()
+        }
+        _ => return Err(format!("unsupported texture format: {format}")),
+    };
+
+    let info = ImageInfo::new(
+        (width as i32, height as i32),
+        ColorType::RGBA8888,
+        AlphaType::Premul,
+        None,
+    );
+    let row_bytes = (width as usize) * 4;
+    let data = Data::new_copy(&rgba);
+    images::raster_from_data(&info, data, row_bytes)
+        .ok_or_else(|| "failed to build raster image".to_string())
 }
 
 #[derive(Clone)]
