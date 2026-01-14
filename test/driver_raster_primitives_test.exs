@@ -22,6 +22,23 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule RRectScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> rounded_rectangle({20, 20, 4},
+          fill: :red,
+          stroke: {4, :white},
+          translate: {10, 10}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   test "draw_rect fills expected pixels" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
 
@@ -54,6 +71,39 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 30, 15) == {255, 255, 255}
     assert pixel_at(frame, width, 15, 30) == {255, 255, 255}
     # Fill sample inside the rect.
+    assert pixel_at(frame, width, 20, 20) == {255, 0, 0}
+  end
+
+  test "draw_rrect fills expected pixels" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: RRectScene)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop()
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(40, fn {w, _h, data} ->
+        pixel_at(data, w, 20, 20) == {255, 0, 0} and
+          pixel_at(data, w, 15, 11) == {255, 255, 255}
+      end)
+
+    # Background just outside the translated rrect bounds.
+    assert pixel_at(frame, width, 7, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 7) == {0, 0, 0}
+    assert pixel_at(frame, width, 33, 10) == {0, 0, 0}
+    assert pixel_at(frame, width, 10, 33) == {0, 0, 0}
+    # Stroke samples on each edge (away from rounded corners).
+    assert pixel_at(frame, width, 15, 11) == {255, 255, 255}
+    assert pixel_at(frame, width, 11, 15) == {255, 255, 255}
+    assert pixel_at(frame, width, 29, 15) == {255, 255, 255}
+    assert pixel_at(frame, width, 15, 29) == {255, 255, 255}
+    # Fill sample inside the rrect.
     assert pixel_at(frame, width, 20, 20) == {255, 0, 0}
   end
 
