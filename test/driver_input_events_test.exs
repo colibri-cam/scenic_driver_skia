@@ -8,6 +8,7 @@ defmodule Scenic.Driver.Skia.InputEventsTest do
 
   test "drains input events while raster backend is running" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+    ensure_renderer_stopped()
 
     case Native.start("raster", nil, "Scenic Window", false) do
       :ok -> :ok
@@ -68,6 +69,7 @@ defmodule Scenic.Driver.Skia.InputEventsTest do
 
   test "cursor visibility toggles are accepted while renderer is running" do
     assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+    ensure_renderer_stopped()
 
     case Native.start("raster", nil, "Scenic Window", false) do
       :ok -> :ok
@@ -94,6 +96,16 @@ defmodule Scenic.Driver.Skia.InputEventsTest do
 
       true ->
         flunk("timed out waiting for raster output at #{path}")
+    end
+  end
+
+  defp ensure_renderer_stopped do
+    case Native.stop() do
+      :ok -> :ok
+      {:ok, _} -> :ok
+      {:error, "renderer not running"} -> :ok
+      {:error, _} -> :ok
+      _ -> :ok
     end
   end
 end

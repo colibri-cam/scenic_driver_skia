@@ -485,6 +485,10 @@ fn wait_for_page_flip(card: &Card) -> Result<(), String> {
     }
 }
 
+fn is_ebusy(err: &str) -> bool {
+    err.contains("Device or resource busy") || err.contains("EBUSY")
+}
+
 fn load_egl() -> Result<(Library, egl::Egl), String> {
     let lib = unsafe { Library::new("libEGL.so.1") }
         .map_err(|e| format!("failed to load libEGL: {e}"))?;
@@ -798,12 +802,19 @@ pub fn run(
             return;
         }
     };
-    let mut cursor_plane = match create_cursor_plane(&card, &gbm_device, &resources, crtc_handle) {
-        Ok(plane) => plane,
-        Err(e) => {
-            eprintln!("DRM cursor setup failed: {e}");
-            None
+    let enable_hw_cursor = std::env::var("SCENIC_DRM_HW_CURSOR")
+        .map(|value| value != "0")
+        .unwrap_or(false);
+    let mut cursor_plane = if enable_hw_cursor {
+        match create_cursor_plane(&card, &gbm_device, &resources, crtc_handle) {
+            Ok(plane) => plane,
+            Err(e) => {
+                eprintln!("DRM cursor setup failed: {e}");
+                None
+            }
         }
+    } else {
+        None
     };
 
     let gbm_surface: Surface<()> = match gbm_device.create_surface(
@@ -931,7 +942,9 @@ pub fn run(
     let cursor_plane_error = cursor_plane
         .as_ref()
         .and_then(|plane| update_cursor_plane(&card, crtc_handle, plane, cursor, dimensions).err());
-    if let Some(err) = cursor_plane_error {
+    if let Some(err) = cursor_plane_error
+        && !is_ebusy(&err)
+    {
         eprintln!("DRM cursor update failed: {err}");
         cursor_plane = None;
         dirty.store(true, Ordering::Relaxed);
@@ -948,7 +961,9 @@ pub fn run(
                 let cursor_plane_error = cursor_plane.as_ref().and_then(|plane| {
                     update_cursor_plane(&card, crtc_handle, plane, cursor, dimensions).err()
                 });
-                if let Some(err) = cursor_plane_error {
+                if let Some(err) = cursor_plane_error
+                    && !is_ebusy(&err)
+                {
                     eprintln!("DRM cursor update failed: {err}");
                     cursor_plane = None;
                     dirty.store(true, Ordering::Relaxed);
@@ -1011,7 +1026,13 @@ pub fn run(
                 AtomicCommitFlags::NONBLOCK | AtomicCommitFlags::PAGE_FLIP_EVENT,
                 flip_req,
             ) {
-                eprintln!("DRM backend unavailable: {e}");
+                let err = e.to_string();
+                if is_ebusy(&err) {
+                    drop(next_bo);
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                eprintln!("DRM backend unavailable: {err}");
                 return;
             }
 
