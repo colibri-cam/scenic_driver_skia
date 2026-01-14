@@ -21,6 +21,7 @@ defmodule ScenicDriverSkia.DemoDrm do
         scene
         |> Scenic.Scene.assign(:rect_fill, :blue)
         |> Scenic.Scene.assign(:cursor_pos_text, "cursor_pos: none")
+        |> Scenic.Scene.assign(:cursor_pos, {0, 0})
         |> Scenic.Scene.assign(:cursor_button_text, "cursor_button: none")
         |> Scenic.Scene.assign(:key_text, "key: none")
 
@@ -32,8 +33,9 @@ defmodule ScenicDriverSkia.DemoDrm do
       scene =
         scene
         |> Scenic.Scene.assign(:cursor_pos_text, format_cursor_pos(x, y))
-        |> Scenic.Scene.push_graph(build_graph(scene))
+        |> Scenic.Scene.assign(:cursor_pos, {x, y})
 
+      scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:noreply, scene}
     end
 
@@ -41,8 +43,8 @@ defmodule ScenicDriverSkia.DemoDrm do
       scene =
         scene
         |> Scenic.Scene.assign(:cursor_button_text, format_cursor_button(button, action, x, y))
-        |> Scenic.Scene.push_graph(build_graph(scene))
 
+      scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:noreply, scene}
     end
 
@@ -50,8 +52,8 @@ defmodule ScenicDriverSkia.DemoDrm do
       scene =
         scene
         |> Scenic.Scene.assign(:key_text, format_key(key, action))
-        |> Scenic.Scene.push_graph(build_graph(scene))
 
+      scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:noreply, scene}
     end
 
@@ -59,8 +61,8 @@ defmodule ScenicDriverSkia.DemoDrm do
       scene =
         scene
         |> Scenic.Scene.assign(:key_text, "codepoint: #{codepoint}")
-        |> Scenic.Scene.push_graph(build_graph(scene))
 
+      scene = Scenic.Scene.push_graph(scene, build_graph(scene))
       {:noreply, scene}
     end
 
@@ -86,6 +88,7 @@ defmodule ScenicDriverSkia.DemoDrm do
     defp build_graph(scene) do
       Scenic.Graph.build()
       |> rect({200, 120}, fill: scene.assigns.rect_fill, translate: {50, 50})
+      |> circle(3, fill: :white, translate: scene.assigns.cursor_pos)
       |> text("Skia DRM", fill: :yellow, translate: {60, 90})
       |> text(scene.assigns.cursor_pos_text, fill: :white, translate: {60, 140})
       |> text(scene.assigns.cursor_button_text, fill: :white, translate: {60, 165})
