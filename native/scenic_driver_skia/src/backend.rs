@@ -454,10 +454,14 @@ impl ApplicationHandler<UserEvent> for App {
                 {
                     let mods = modifiers_to_mask(map_modifiers(self.modifiers));
                     for ch in text.chars() {
-                        self.push_input(InputEvent::Codepoint {
-                            codepoint: ch,
-                            mods,
-                        });
+                        // Filter out control characters (backspace, delete, etc.)
+                        // Only send printable characters as codepoints
+                        if !ch.is_control() {
+                            self.push_input(InputEvent::Codepoint {
+                                codepoint: ch,
+                                mods,
+                            });
+                        }
                     }
                 }
             }
@@ -469,10 +473,12 @@ impl ApplicationHandler<UserEvent> for App {
                 {
                     let mods = modifiers_to_mask(map_modifiers(self.modifiers));
                     for ch in text.chars() {
-                        self.push_input(InputEvent::Codepoint {
-                            codepoint: ch,
-                            mods,
-                        });
+                        if !ch.is_control() {
+                            self.push_input(InputEvent::Codepoint {
+                                codepoint: ch,
+                                mods,
+                            });
+                        }
                     }
                 }
             }
