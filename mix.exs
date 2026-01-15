@@ -22,7 +22,7 @@ defmodule ScenicDriverSkia.MixProject do
   defp deps do
     [
       {:rustler, "~> 0.37"},
-      {:scenic, path: "../scenic", override: true},
+      {:scenic, git: "https://github.com/ScenicFramework/scenic.git", override: true},
       {:scenic_clock, "~> 0.11.0"}
     ]
   end
