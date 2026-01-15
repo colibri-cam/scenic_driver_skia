@@ -19,6 +19,7 @@ defmodule Scenic.Driver.Skia do
   alias Scenic.Driver
 
   alias Scenic.Driver.Skia.Native
+  alias Scenic.Assets.Static
   alias Scenic.Assets.Stream
   alias Scenic.{Script, ViewPort}
 
@@ -90,7 +91,7 @@ defmodule Scenic.Driver.Skia do
            update_count: 0,
            input_mask: 0,
            renderer: renderer,
-           media: %{images: [], streams: []}
+           media: %{fonts: [], images: [], streams: []}
          )}
 
       {:error, reason} ->
@@ -254,8 +255,30 @@ defmodule Scenic.Driver.Skia do
     media = Script.media(script)
 
     driver
+    |> ensure_fonts(Map.get(media, :fonts, []))
     |> ensure_images(Map.get(media, :images, []))
     |> ensure_streams(Map.get(media, :streams, []))
+  end
+
+  defp ensure_fonts(driver, []), do: driver
+
+  defp ensure_fonts(%{assigns: %{renderer: renderer, media: media}} = driver, ids) do
+    fonts = Map.get(media, :fonts, [])
+
+    fonts =
+      Enum.reduce(ids, fonts, fn id, fonts ->
+        with false <- Enum.member?(fonts, id),
+             {:ok, {Static.Font, _}} <- Static.meta(id),
+             {:ok, hash} <- Static.to_hash(id),
+             {:ok, bin} <- Static.load(id) do
+          _ = Native.put_font(renderer, hash, bin)
+          [id | fonts]
+        else
+          _ -> fonts
+        end
+      end)
+
+    assign(driver, :media, Map.put(media, :fonts, fonts))
   end
 
   defp ensure_images(driver, []), do: driver
@@ -266,8 +289,10 @@ defmodule Scenic.Driver.Skia do
     images =
       Enum.reduce(ids, images, fn id, images ->
         with false <- Enum.member?(images, id),
-             {:ok, bin} <- read_asset_binary(id) do
-          _ = Native.put_static_image(renderer, id, bin)
+             {:ok, {Static.Image, _}} <- Static.meta(id),
+             {:ok, hash} <- Static.to_hash(id),
+             {:ok, bin} <- Static.load(id) do
+          _ = Native.put_static_image(renderer, hash, bin)
           [id | images]
         else
           _ -> images
@@ -323,12 +348,6 @@ defmodule Scenic.Driver.Skia do
   defp drop_stream(id, %{assigns: %{media: media}} = driver) do
     streams = List.delete(Map.get(media, :streams, []), id)
     assign(driver, :media, Map.put(media, :streams, streams))
-  end
-
-  defp read_asset_binary(id) do
-    app_priv = :code.priv_dir(:scenic_driver_skia) |> to_string()
-    path = Path.join([app_priv, "__scenic", "assets", id])
-    File.read(path)
   end
 
   @impl GenServer

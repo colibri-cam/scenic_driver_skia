@@ -23,7 +23,7 @@ defmodule ScenicDriverSkia.MixProject do
     [
       {:rustler, "~> 0.37"},
       {:scenic, path: "../scenic", override: true},
-      {:scenic_clock, path: "../scenic_clock"}
+      {:scenic_clock, "~> 0.11.0"}
     ]
   end
 
