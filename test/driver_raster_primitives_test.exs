@@ -579,6 +579,24 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule SpritesScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> sprites(
+          {:test_red,
+           [
+             {{0, 0}, {2, 2}, {10, 10}, {20, 20}}
+           ]}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   defmodule CapCompareScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -1666,6 +1684,29 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
 
     # Stream stroke should render along the line.
     assert any_non_background?(frame, width, 12..28, 18..22)
+  end
+
+  test "sprites draw the source image section" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: SpritesScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        red_pixel?(pixel_at(data, w, 15, 15))
+      end)
+
+    # Sprites should render the red source pixel in the target region.
+    assert red_pixel?(pixel_at(frame, width, 15, 15))
   end
 
   test "cap square extends farther than butt" do
