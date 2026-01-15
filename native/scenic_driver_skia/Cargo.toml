@@ -22,4 +22,4 @@ evdev = "0.12"
 libc = "0.2"
 
 # Skia on Wayland via EGL:
-skia-safe = { version = "0.91.1", features = ["wayland", "embed-freetype"] }
+skia-safe = { version = "0.91.1", default-features = false, features = ["wayland", "embed-freetype", "binary-cache"] }

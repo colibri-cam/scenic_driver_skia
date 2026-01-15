@@ -1,5 +1,15 @@
 defmodule Scenic.Driver.Skia.Native do
-  use Rustler, otp_app: :scenic_driver_skia, crate: "scenic_driver_skia"
+  @rustler_opts Mix.Project.config()[:rustler_opts]
+
+  use Rustler,
+      Keyword.merge(
+        [
+          otp_app: :scenic_driver_skia,
+          crate: "scenic_driver_skia",
+          mode: if(Mix.env() == :prod, do: :release, else: :debug)
+        ],
+        @rustler_opts
+      )
 
   @doc false
   def start(

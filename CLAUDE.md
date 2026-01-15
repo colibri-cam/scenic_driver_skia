@@ -28,6 +28,10 @@ mix run scripts/demo_drm.exs       # DRM + input demo
 mix run scripts/demo_raster.exs    # Offscreen rendering
 ```
 
+## Git Conventions
+
+- Do not add Co-authored-by lines when creating commits
+
 ## Architecture
 
 ### Data Flow
@@ -79,6 +83,22 @@ The `ScriptOp` enum in `renderer.rs` defines all drawable operations:
 - Requires local Scenic at `/workspace/scenic` (path override in mix.exs)
 - Tool versions pinned in `mise.toml`: Elixir 1.19.4, Erlang 28.3
 - Rustler 0.37, skia-safe 0.91.1
+
+## Nerves Cross-Compilation
+
+The project supports cross-compilation for Nerves targets. Configuration is automatic:
+
+- Detects `NERVES_SDK_SYSROOT` and `CC` environment variables (set by Nerves)
+- Maps Nerves target triples to Rust target triples:
+  - `armv6-nerves-linux-gnueabihf` → `arm-unknown-linux-gnueabihf` (rpi0)
+  - `armv7-nerves-linux-gnueabihf` → `armv7-unknown-linux-gnueabihf` (rpi, rpi2, rpi3)
+  - `aarch64-nerves-linux-gnu` → `aarch64-unknown-linux-gnu` (rpi4, rpi5)
+  - `x86_64-nerves-linux-musl` → `x86_64-unknown-linux-musl` (x86_64)
+- Extracts target from `CC` environment variable path
+- Configures cargo linker via `CARGO_TARGET_*_LINKER` environment variable
+- Falls back to host target when not in Nerves environment
+
+Cross-compilation is handled entirely by Nerves toolchain - no manual setup required.
 
 ## Additional Documentation
 
