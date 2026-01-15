@@ -19,6 +19,7 @@ Completed:
 - Added static image and stream paint support.
 - Added Script path-shape ops (`triangle`, `quad`, `rect`, `rrect`, `sector`, `circle`, `ellipse`, `arc`) and `draw_sprites` support.
 - Added clip-path support for driver scripts with raster coverage.
+- Added raster coverage for sprites, stroke image/stream paint, and draw_script recursion guard.
 - Documented stream image update flow in `GUIDES.md`.
 - Validated font aliasing details in `ASSETS.md`.
 - Stream asset updates refresh textures and trigger redraws.
@@ -69,5 +70,4 @@ Completed:
    - Track script dependencies to only redraw affected sub-graphs when possible.
 9. **Testing**
    - Add integration tests: render script to raster, validate output properties (dimensions, non-empty image).
-   - Add regression test for `draw_script` recursion guard.
    - Add smoke tests for input events and window resize behavior.
