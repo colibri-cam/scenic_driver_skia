@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use skia_safe::{
-    AlphaType, ClipOp, Color, ColorType, Data, Font, FontMgr, FontStyle, Image, ImageInfo, Matrix,
-    Paint, PaintCap, PaintJoin, PaintStyle, PathBuilder, PathDirection, Point, RRect, Rect,
-    SamplingOptions, Shader, Surface, TileMode, Typeface, Vector,
+    AlphaType, ClipOp, Color, ColorType, Data, FilterMode, Font, FontMgr, FontStyle, Image,
+    ImageInfo, Matrix, MipmapMode, Paint, PaintCap, PaintJoin, PaintStyle, PathBuilder,
+    PathDirection, Point, RRect, Rect, SamplingOptions, Shader, Surface, TileMode, Typeface,
+    Vector,
     canvas::SrcRectConstraint,
     gpu::{self, SurfaceOrigin, backend_render_targets, gl::FramebufferInfo},
     images,
@@ -252,6 +253,7 @@ pub struct RenderState {
 
 static IMAGE_CACHE: OnceLock<Mutex<HashMap<String, Image>>> = OnceLock::new();
 static STREAM_CACHE: OnceLock<Mutex<HashMap<String, Image>>> = OnceLock::new();
+static FONT_CACHE: OnceLock<Mutex<HashMap<String, Typeface>>> = OnceLock::new();
 
 impl Default for RenderState {
     fn default() -> Self {
@@ -938,10 +940,11 @@ fn draw_script(
                     let dst = Rect::from_xywh(cmd.dx, cmd.dy, cmd.dw, cmd.dh);
                     let mut paint = Paint::default();
                     paint.set_alpha_f(cmd.alpha);
-                    canvas.draw_image_rect(
+                    canvas.draw_image_rect_with_sampling_options(
                         &image,
                         Some((&src, SrcRectConstraint::Fast)),
                         dst,
+                        SamplingOptions::new(FilterMode::Linear, MipmapMode::None),
                         &paint,
                     );
                 }
@@ -1037,29 +1040,26 @@ fn font_from_asset(font_id: &str, size: f32) -> Option<Font> {
 }
 
 fn typeface_from_asset(font_id: &str) -> Option<Typeface> {
-    static FONT_CACHE: OnceLock<Mutex<HashMap<String, Typeface>>> = OnceLock::new();
     let cache = FONT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-
     if let Ok(cache) = cache.lock()
         && let Some(typeface) = cache.get(font_id)
     {
         return Some(typeface.clone());
     }
+    None
+}
 
-    let mut path = std::env::current_dir().ok()?;
-    path.push("priv");
-    path.push("__scenic");
-    path.push("assets");
-    path.push(font_id);
-    let bytes = std::fs::read(path).ok()?;
+pub fn insert_font(id: &str, data: &[u8]) -> Result<(), String> {
     let fm = FontMgr::new();
-    let typeface = fm.new_from_data(&bytes, 0)?;
-
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(font_id.to_string(), typeface.clone());
-    }
-
-    Some(typeface)
+    let typeface = fm
+        .new_from_data(data, 0)
+        .ok_or_else(|| "invalid font data".to_string())?;
+    let cache = FONT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache
+        .lock()
+        .map_err(|_| "font cache lock poisoned".to_string())?;
+    cache.insert(id.to_string(), typeface);
+    Ok(())
 }
 
 fn load_static_shader(id: &str) -> Option<Shader> {
@@ -1073,7 +1073,7 @@ fn load_stream_shader(id: &str) -> Option<Shader> {
 fn image_to_shader(image: &Image) -> Option<Shader> {
     image.to_shader(
         Some((TileMode::Repeat, TileMode::Repeat)),
-        SamplingOptions::default(),
+        SamplingOptions::new(FilterMode::Linear, MipmapMode::None),
         None,
     )
 }
@@ -1118,15 +1118,7 @@ fn cached_static_image(id: &str) -> Option<Image> {
     {
         return Some(image.clone());
     }
-
-    let bytes = read_asset_bytes(id)?;
-    let image = Image::from_encoded(Data::new_copy(&bytes))?;
-
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(id.to_string(), image.clone());
-    }
-
-    Some(image)
+    None
 }
 
 fn cached_stream_image(id: &str) -> Option<Image> {
@@ -1139,15 +1131,6 @@ fn cached_stream_image(id: &str) -> Option<Image> {
     }
 
     None
-}
-
-fn read_asset_bytes(asset_id: &str) -> Option<Vec<u8>> {
-    let mut path = std::env::current_dir().ok()?;
-    path.push("priv");
-    path.push("__scenic");
-    path.push("assets");
-    path.push(asset_id);
-    std::fs::read(path).ok()
 }
 
 pub fn insert_static_image(id: &str, image: Image) {
