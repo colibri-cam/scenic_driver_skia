@@ -5,7 +5,7 @@ defmodule ScenicDriverSkia.DemoWayland do
     alias Scenic.Script
 
     def init(scene, _args, _opts) do
-      scene = Scenic.Scene.push_script(scene, build_rrectv_script(), "rrectv_demo")
+      #scene = Scenic.Scene.push_script(scene, build_rrectv_script(), "rrectv_demo")
       scene = Scenic.Scene.push_script(scene, build_path_shape_script(), "path_shape_demo")
       scene = Scenic.Scene.push_script(scene, build_clip_path_script(), "clip_path_demo")
       scene = Scenic.Scene.assign(scene, join_miter_limit: 1)
@@ -66,7 +66,7 @@ defmodule ScenicDriverSkia.DemoWayland do
         translate: {x2, y1}
       )
       |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
-      |> script("rrectv_demo", translate: {x3, y1})
+      #|> script("rrectv_demo", translate: {x3, y1})
       |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
       |> rect({200, 120},
         fill: {:radial, {100, 60, 0, 80, :red, :blue}},
@@ -211,7 +211,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> Script.fill_color(:navy)
       |> Script.stroke_color(:white)
       |> Script.stroke_width(3)
-      |> Script.draw_variable_rounded_rectangle(200, 120, 36, 18, 54, 9, :fill_stroke)
+      #|> Script.draw_variable_rounded_rectangle(200, 120, 36, 18, 54, 9, :fill_stroke)
       |> Script.finish()
     end
 
@@ -287,7 +287,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> Script.push_state()
       |> Script.translate(170, 65)
       |> Script.begin_path()
-      |> Script.arc(0, 0, 18, 0.0, 1.8, 1)
+      #|> Script.arc(0, 0, 18, 0.0, 1.8, 1)
       |> Script.stroke_path()
       |> Script.pop_state()
       |> Script.finish()

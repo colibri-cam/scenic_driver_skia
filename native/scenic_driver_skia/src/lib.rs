@@ -382,6 +382,16 @@ pub fn put_static_image(
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
+pub fn put_font(
+    renderer: ResourceArc<RendererResource>,
+    id: String,
+    data: rustler::Binary,
+) -> Result<(), String> {
+    renderer::insert_font(&id, data.as_slice())?;
+    with_handle(&renderer, signal_redraw)
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn put_stream_texture(
     renderer: ResourceArc<RendererResource>,
     id: String,
@@ -528,7 +538,142 @@ fn set_script(state: &mut RenderState, id: String, ops: Vec<ScriptOp>) {
     }
 }
 
+fn is_known_opcode(opcode: u16) -> bool {
+    matches!(
+        opcode,
+        0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x08 | 0x09 | 0x0A | 0x0B
+            | 0x0C | 0x0F | 0x20 | 0x21 | 0x22 | 0x23 | 0x26 | 0x27 | 0x28 | 0x29 | 0x2A
+            | 0x2B | 0x2C | 0x2D | 0x2E | 0x2F | 0x30 | 0x31 | 0x32 | 0x40 | 0x41 | 0x42
+            | 0x44 | 0x45 | 0x50 | 0x51 | 0x52 | 0x53 | 0x60 | 0x61 | 0x62 | 0x63 | 0x64
+            | 0x70 | 0x71 | 0x72 | 0x73 | 0x74 | 0x75 | 0x80 | 0x81 | 0x82 | 0x90 | 0x91
+            | 0x92 | 0x93
+    )
+}
+
+fn next_opcode_valid(bytes: &[u8]) -> bool {
+    if bytes.len() < 2 {
+        return true;
+    }
+    let opcode = u16::from_be_bytes([bytes[0], bytes[1]]);
+    is_known_opcode(opcode)
+}
+
 fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
+    fn parse_sprite_cmds_with_alpha(
+        cmds_bytes: &[u8],
+        count: usize,
+    ) -> Result<(Vec<crate::renderer::SpriteCommand>, &[u8]), String> {
+        let cmd_bytes = count
+            .checked_mul(9)
+            .and_then(|v| v.checked_mul(4))
+            .ok_or_else(|| "draw_sprites command overflow".to_string())?;
+        if cmds_bytes.len() < cmd_bytes {
+            return Err("draw_sprites command data truncated".to_string());
+        }
+        let (cmds_bytes, tail) = cmds_bytes.split_at(cmd_bytes);
+        let mut cmds = Vec::with_capacity(count);
+        let mut cmd_rest = cmds_bytes;
+        for _ in 0..count {
+            let (cmd, next) = cmd_rest.split_at(36);
+            let sx = f32::from_bits(u32::from_be_bytes([cmd[0], cmd[1], cmd[2], cmd[3]]));
+            let sy = f32::from_bits(u32::from_be_bytes([cmd[4], cmd[5], cmd[6], cmd[7]]));
+            let sw = f32::from_bits(u32::from_be_bytes([cmd[8], cmd[9], cmd[10], cmd[11]]));
+            let sh = f32::from_bits(u32::from_be_bytes([cmd[12], cmd[13], cmd[14], cmd[15]]));
+            let dx = f32::from_bits(u32::from_be_bytes([cmd[16], cmd[17], cmd[18], cmd[19]]));
+            let dy = f32::from_bits(u32::from_be_bytes([cmd[20], cmd[21], cmd[22], cmd[23]]));
+            let dw = f32::from_bits(u32::from_be_bytes([cmd[24], cmd[25], cmd[26], cmd[27]]));
+            let dh = f32::from_bits(u32::from_be_bytes([cmd[28], cmd[29], cmd[30], cmd[31]]));
+            let alpha = f32::from_bits(u32::from_be_bytes([cmd[32], cmd[33], cmd[34], cmd[35]]));
+            cmds.push(crate::renderer::SpriteCommand {
+                sx,
+                sy,
+                sw,
+                sh,
+                dx,
+                dy,
+                dw,
+                dh,
+                alpha,
+            });
+            cmd_rest = next;
+        }
+        Ok((cmds, tail))
+    }
+
+    fn parse_sprite_cmds_without_alpha(
+        cmds_bytes: &[u8],
+        count: usize,
+    ) -> Result<(Vec<crate::renderer::SpriteCommand>, &[u8]), String> {
+        let cmd_bytes = count
+            .checked_mul(8)
+            .and_then(|v| v.checked_mul(4))
+            .ok_or_else(|| "draw_sprites command overflow".to_string())?;
+        if cmds_bytes.len() < cmd_bytes {
+            return Err("draw_sprites command data truncated".to_string());
+        }
+        let (cmds_bytes, tail) = cmds_bytes.split_at(cmd_bytes);
+        let mut cmds = Vec::with_capacity(count);
+        let mut cmd_rest = cmds_bytes;
+        for _ in 0..count {
+            let (cmd, next) = cmd_rest.split_at(32);
+            let sx = f32::from_bits(u32::from_be_bytes([cmd[0], cmd[1], cmd[2], cmd[3]]));
+            let sy = f32::from_bits(u32::from_be_bytes([cmd[4], cmd[5], cmd[6], cmd[7]]));
+            let sw = f32::from_bits(u32::from_be_bytes([cmd[8], cmd[9], cmd[10], cmd[11]]));
+            let sh = f32::from_bits(u32::from_be_bytes([cmd[12], cmd[13], cmd[14], cmd[15]]));
+            let dx = f32::from_bits(u32::from_be_bytes([cmd[16], cmd[17], cmd[18], cmd[19]]));
+            let dy = f32::from_bits(u32::from_be_bytes([cmd[20], cmd[21], cmd[22], cmd[23]]));
+            let dw = f32::from_bits(u32::from_be_bytes([cmd[24], cmd[25], cmd[26], cmd[27]]));
+            let dh = f32::from_bits(u32::from_be_bytes([cmd[28], cmd[29], cmd[30], cmd[31]]));
+            cmds.push(crate::renderer::SpriteCommand {
+                sx,
+                sy,
+                sw,
+                sh,
+                dx,
+                dy,
+                dw,
+                dh,
+                alpha: 1.0,
+            });
+            cmd_rest = next;
+        }
+        Ok((cmds, tail))
+    }
+
+    fn select_sprite_cmds(
+        cmds_bytes: &[u8],
+        count: usize,
+    ) -> Result<(Vec<crate::renderer::SpriteCommand>, &[u8]), String> {
+        let with_alpha = parse_sprite_cmds_with_alpha(cmds_bytes, count).ok();
+        let without_alpha = parse_sprite_cmds_without_alpha(cmds_bytes, count).ok();
+
+        let alpha_candidate = with_alpha.and_then(|(cmds, tail)| {
+            let alpha_ok = cmds
+                .iter()
+                .all(|cmd| cmd.alpha >= 0.0 && cmd.alpha <= 1.0);
+            if alpha_ok && next_opcode_valid(tail) {
+                Some((cmds, tail))
+            } else {
+                None
+            }
+        });
+
+        let no_alpha_candidate = without_alpha.and_then(|(cmds, tail)| {
+            if next_opcode_valid(tail) {
+                Some((cmds, tail))
+            } else {
+                None
+            }
+        });
+
+        match (alpha_candidate, no_alpha_candidate) {
+            (Some(result), None) => Ok(result),
+            (None, Some(result)) => Ok(result),
+            (Some(result), Some(_)) => Ok(result),
+            (None, None) => Err("draw_sprites command data truncated".to_string()),
+        }
+    }
+
     let mut rest = script;
     let mut ops = Vec::new();
     while rest.len() >= 2 {
@@ -536,6 +681,12 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
         let opcode = u16::from_be_bytes([op[0], op[1]]);
         rest = remaining;
         match opcode {
+            0x00 => {
+                if rest.len() < 2 {
+                    break;
+                }
+                break;
+            }
             0x44 => {
                 if rest.len() < 10 {
                     return Err("scissor opcode truncated".to_string());
@@ -1680,46 +1831,23 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
                 let (id_bytes, tail) = tail.split_at(len);
                 let id = String::from_utf8_lossy(id_bytes).to_string();
                 let tail = &tail[pad..];
-                let cmd_bytes = count
-                    .checked_mul(9)
-                    .and_then(|v| v.checked_mul(4))
-                    .ok_or_else(|| "draw_sprites command overflow".to_string())?;
-                if tail.len() < cmd_bytes {
-                    return Err("draw_sprites command data truncated".to_string());
-                }
-                let (cmds_bytes, tail) = tail.split_at(cmd_bytes);
-                let mut cmds = Vec::with_capacity(count);
-                let mut cmd_rest = cmds_bytes;
-                for _ in 0..count {
-                    let (cmd, next) = cmd_rest.split_at(36);
-                    let sx = f32::from_bits(u32::from_be_bytes([cmd[0], cmd[1], cmd[2], cmd[3]]));
-                    let sy = f32::from_bits(u32::from_be_bytes([cmd[4], cmd[5], cmd[6], cmd[7]]));
-                    let sw = f32::from_bits(u32::from_be_bytes([cmd[8], cmd[9], cmd[10], cmd[11]]));
-                    let sh =
-                        f32::from_bits(u32::from_be_bytes([cmd[12], cmd[13], cmd[14], cmd[15]]));
-                    let dx =
-                        f32::from_bits(u32::from_be_bytes([cmd[16], cmd[17], cmd[18], cmd[19]]));
-                    let dy =
-                        f32::from_bits(u32::from_be_bytes([cmd[20], cmd[21], cmd[22], cmd[23]]));
-                    let dw =
-                        f32::from_bits(u32::from_be_bytes([cmd[24], cmd[25], cmd[26], cmd[27]]));
-                    let dh =
-                        f32::from_bits(u32::from_be_bytes([cmd[28], cmd[29], cmd[30], cmd[31]]));
-                    let alpha =
-                        f32::from_bits(u32::from_be_bytes([cmd[32], cmd[33], cmd[34], cmd[35]]));
-                    cmds.push(crate::renderer::SpriteCommand {
-                        sx,
-                        sy,
-                        sw,
-                        sh,
-                        dx,
-                        dy,
-                        dw,
-                        dh,
-                        alpha,
-                    });
-                    cmd_rest = next;
-                }
+                let (cmds, tail) = match select_sprite_cmds(tail, count) {
+                    Ok(result) => result,
+                    Err(_) => {
+                        if tail.len() < 4 {
+                            return Err("draw_sprites command data truncated".to_string());
+                        }
+                        let (count_bytes, cmds_tail) = tail.split_at(4);
+                        let fallback_count = u32::from_be_bytes([
+                            count_bytes[0],
+                            count_bytes[1],
+                            count_bytes[2],
+                            count_bytes[3],
+                        ]) as usize;
+                        select_sprite_cmds(cmds_tail, fallback_count)?
+                    }
+                };
+
                 ops.push(ScriptOp::DrawSprites { image_id: id, cmds });
                 rest = tail;
             }
@@ -2091,12 +2219,57 @@ mod tests {
     }
 
     #[test]
+    fn parse_finished_marker() {
+        let script: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert!(ops.is_empty());
+    }
+
+    #[test]
     fn parse_draw_sprites() {
         let mut script: Vec<u8> = Vec::new();
         script.extend_from_slice(&[0x00, 0x0B, 0x00, 0x06]);
         script.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]);
         script.extend_from_slice(b"sprite");
         script.extend_from_slice(&[0x00, 0x00]);
+        push_f32(&mut script, 1.0);
+        push_f32(&mut script, 2.0);
+        push_f32(&mut script, 3.0);
+        push_f32(&mut script, 4.0);
+        push_f32(&mut script, 5.0);
+        push_f32(&mut script, 6.0);
+        push_f32(&mut script, 7.0);
+        push_f32(&mut script, 8.0);
+        push_f32(&mut script, 0.5);
+
+        let ops = parse_script(&script).expect("parse_script failed");
+        assert_eq!(
+            ops,
+            vec![ScriptOp::DrawSprites {
+                image_id: "sprite".to_string(),
+                cmds: vec![SpriteCommand {
+                    sx: 1.0,
+                    sy: 2.0,
+                    sw: 3.0,
+                    sh: 4.0,
+                    dx: 5.0,
+                    dy: 6.0,
+                    dw: 7.0,
+                    dh: 8.0,
+                    alpha: 0.5,
+                }]
+            }]
+        );
+    }
+
+    #[test]
+    fn parse_draw_sprites_fallback_count_after_id() {
+        let mut script: Vec<u8> = Vec::new();
+        script.extend_from_slice(&[0x00, 0x0B, 0x00, 0x06]);
+        script.extend_from_slice(&[0x00, 0x00, 0x00, 0x02]);
+        script.extend_from_slice(b"sprite");
+        script.extend_from_slice(&[0x00, 0x00]);
+        script.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]);
         push_f32(&mut script, 1.0);
         push_f32(&mut script, 2.0);
         push_f32(&mut script, 3.0);

@@ -35,6 +35,9 @@ defmodule Scenic.Driver.Skia.Native do
   def put_static_image(_renderer, _id, _data), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc false
+  def put_font(_renderer, _id, _data), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc false
   def put_stream_texture(_renderer, _id, _format, _width, _height, _data),
     do: :erlang.nif_error(:nif_not_loaded)
 
