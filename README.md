@@ -1,6 +1,6 @@
 # Scenic.Driver.Skia
 
-WIP: This driver is under active development and is not production-ready.
+WIP: This driver is under development and is not production-ready.
 
 Disclaimer: Most of the code in this repository is AI generated.
 
@@ -9,12 +9,12 @@ Elixir wrapper used by Scenic applications.
 
 ## Installation
 
-This project is currently developed from source. Add it as a path dependency:
+This project is currently developed from source. Add it as a git dependency:
 
 ```elixir
 def deps do
   [
-    {:scenic_driver_skia, path: "../scenic_driver_skia"}
+    {:scenic_driver_skia, git: "https://github.com/colibri-cam/scenic_driver_skia.git"}
   ]
 end
 ```
