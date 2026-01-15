@@ -118,6 +118,11 @@ defmodule ScenicDriverSkia.DemoWayland do
         translate: {x5, y3}
       )
       |> text("image", fill: :white, translate: {x5, y3 + label_offset})
+      |> line({{0, 0}, {200, 0}},
+        stroke: {12, {:image, :stock}},
+        translate: {x5, y3 + 150}
+      )
+      |> text("image stroke", fill: :white, translate: {x5, y3 + 180})
       |> rect({200, 120},
         fill: :red,
         scissor: {120, 60},
@@ -144,6 +149,11 @@ defmodule ScenicDriverSkia.DemoWayland do
         translate: {x5, y4}
       )
       |> text("stream", fill: :white, translate: {x5, y4 + label_offset})
+      |> line({{0, 0}, {200, 0}},
+        stroke: {12, {:stream, "demo_stream"}},
+        translate: {x5, y4 + 150}
+      )
+      |> text("stream stroke", fill: :white, translate: {x5, y4 + 180})
       |> path(
         [
           :begin,
