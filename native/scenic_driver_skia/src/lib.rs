@@ -31,7 +31,6 @@ enum StopSignal {
 
 struct DriverHandle {
     stop: StopSignal,
-    text: Arc<Mutex<String>>,
     render_state: Arc<Mutex<RenderState>>,
     input_events: Arc<Mutex<InputQueue>>,
     input_mask: Arc<AtomicU32>,
@@ -71,7 +70,6 @@ pub fn start(
         .unwrap_or_else(|| String::from("wayland"));
 
     let thread_name = format!("scenic-driver-{backend}");
-    let text = Arc::new(Mutex::new(String::from("Hello, Wayland")));
     let render_state = Arc::new(Mutex::new(RenderState::default()));
     let input_events = Arc::new(Mutex::new(InputQueue::new()));
     let input_mask = Arc::new(AtomicU32::new(0));
@@ -79,7 +77,6 @@ pub fn start(
     let handle = if backend == "drm" {
         let stop = Arc::new(AtomicBool::new(false));
         let dirty = Arc::new(AtomicBool::new(false));
-        let text_for_thread = Arc::clone(&text);
         let state_for_thread = Arc::clone(&render_state);
         let dirty_for_thread = Arc::clone(&dirty);
         let stop_for_thread = Arc::clone(&stop);
@@ -94,7 +91,6 @@ pub fn start(
             .spawn(move || {
                 drm_backend::run(
                     stop_for_thread,
-                    text_for_thread,
                     dirty_for_thread,
                     state_for_thread,
                     input_for_thread,
@@ -111,7 +107,6 @@ pub fn start(
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
         DriverHandle {
             stop: StopSignal::Drm(stop),
-            text,
             render_state,
             input_events,
             input_mask,
@@ -127,7 +122,6 @@ pub fn start(
         let state_for_thread = Arc::clone(&render_state);
         let dirty_for_thread = Arc::clone(&dirty);
         let stop_for_thread = Arc::clone(&stop);
-        let text_for_thread = Arc::clone(&text);
         let raster_frame = Arc::new(Mutex::new(None));
         let frame_for_thread = Arc::clone(&raster_frame);
         let input_for_thread = Arc::clone(&input_mask);
@@ -140,7 +134,6 @@ pub fn start(
                     dirty_for_thread,
                     state_for_thread,
                     frame_for_thread,
-                    text_for_thread,
                     input_for_thread,
                     requested_size,
                 )
@@ -148,7 +141,6 @@ pub fn start(
             .map_err(|err| format!("failed to spawn renderer thread: {err}"))?;
         DriverHandle {
             stop: StopSignal::Raster(stop),
-            text,
             render_state,
             input_events,
             input_mask,
@@ -160,10 +152,6 @@ pub fn start(
         }
     } else {
         let (proxy_tx, proxy_rx) = mpsc::channel();
-        let initial_text = text
-            .lock()
-            .map_err(|_| "driver state lock poisoned".to_string())?
-            .clone();
         let running_for_thread = Arc::clone(&running);
         let state_for_thread = Arc::clone(&render_state);
         let input_for_thread = Arc::clone(&input_mask);
@@ -174,7 +162,6 @@ pub fn start(
             .spawn(move || {
                 backend::run(
                     proxy_tx,
-                    initial_text,
                     running_for_thread,
                     state_for_thread,
                     input_for_thread,
@@ -192,7 +179,6 @@ pub fn start(
             .map_err(|_| "renderer did not initialize in time".to_string())?;
         DriverHandle {
             stop: StopSignal::Wayland(proxy),
-            text,
             render_state,
             input_events,
             input_mask,
@@ -279,31 +265,6 @@ pub fn stop(renderer: ResourceArc<RendererResource>) -> Result<(), String> {
         };
 
         signal_result.and(join_result)
-    })
-}
-
-#[rustler::nif(schedule = "DirtyIo")]
-pub fn set_text(renderer: ResourceArc<RendererResource>, text: String) -> Result<(), String> {
-    with_handle(&renderer, |handle| {
-        {
-            let mut stored = handle
-                .text
-                .lock()
-                .map_err(|_| "text state lock poisoned".to_string())?;
-            *stored = text.clone();
-        }
-
-        match &handle.stop {
-            StopSignal::Wayland(proxy) => proxy
-                .send_event(UserEvent::SetText(text))
-                .map_err(|err| format!("failed to signal renderer: {err}")),
-            StopSignal::Drm(_) | StopSignal::Raster(_) => {
-                if let Some(dirty) = &handle.dirty {
-                    dirty.store(true, Ordering::Relaxed);
-                }
-                Ok(())
-            }
-        }
     })
 }
 

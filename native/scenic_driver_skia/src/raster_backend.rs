@@ -58,7 +58,6 @@ pub fn run(
     dirty: Arc<AtomicBool>,
     render_state: Arc<Mutex<RenderState>>,
     frame_slot: Arc<Mutex<Option<RasterFrame>>>,
-    text: Arc<Mutex<String>>,
     input_mask: Arc<AtomicU32>,
     requested_size: Option<(u32, u32)>,
 ) {
@@ -77,8 +76,7 @@ pub fn run(
     let surface =
         surfaces::raster(&image_info, None, None).expect("Failed to create raster surface");
 
-    let initial_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let mut renderer = Renderer::from_surface(surface, None, initial_text);
+    let mut renderer = Renderer::from_surface(surface, None);
     if let Ok(state) = render_state.lock() {
         renderer.redraw(&state);
     }
@@ -90,8 +88,6 @@ pub fn run(
             break;
         }
         if dirty.swap(false, Ordering::Relaxed) {
-            let updated_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            renderer.set_text(updated_text);
             if let Ok(state) = render_state.lock() {
                 renderer.redraw(&state);
             }

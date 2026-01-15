@@ -43,7 +43,6 @@ use crate::renderer::{RenderState, Renderer};
 #[derive(Debug)]
 pub enum UserEvent {
     Stop,
-    SetText(String),
     Redraw,
 }
 
@@ -58,7 +57,6 @@ struct App {
     renderer: Option<Renderer>,
     running: bool,
     running_flag: Arc<AtomicBool>,
-    current_text: String,
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
     input_events: Arc<Mutex<InputQueue>>,
@@ -126,10 +124,7 @@ impl App {
     fn set_running(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, running: bool) {
         if running && !self.running {
             if self.env.is_none() || self.renderer.is_none() {
-                match create_env_renderer_with_active_event_loop(
-                    event_loop,
-                    self.current_text.clone(),
-                ) {
+                match create_env_renderer_with_active_event_loop(event_loop) {
                     Ok((env, renderer)) => {
                         let size = env.window.inner_size();
                         self.env = Some(env);
@@ -187,7 +182,6 @@ pub struct WaylandWindowConfig {
 
 fn create_env_renderer_with_event_loop(
     event_loop: &EventLoop<UserEvent>,
-    initial_text: String,
     config: WaylandWindowConfig,
 ) -> Result<(Env, Renderer), String> {
     let window_attributes = WindowAttributes::default()
@@ -298,7 +292,6 @@ fn create_env_renderer_with_event_loop(
         gr_context,
         num_samples,
         stencil_size,
-        initial_text,
     );
 
     let env = Env {
@@ -312,7 +305,6 @@ fn create_env_renderer_with_event_loop(
 
 fn create_env_renderer_with_active_event_loop(
     event_loop: &winit::event_loop::ActiveEventLoop,
-    initial_text: String,
 ) -> Result<(Env, Renderer), String> {
     let window_attributes = WindowAttributes::default()
         .with_title("skia-wayland-hello")
@@ -417,7 +409,6 @@ fn create_env_renderer_with_active_event_loop(
         gr_context,
         num_samples,
         stencil_size,
-        initial_text,
     );
 
     let env = Env {
@@ -585,15 +576,6 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::Stop => self.set_running(event_loop, false),
-            UserEvent::SetText(text) => {
-                self.current_text = text.clone();
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.set_text(text);
-                }
-                if self.running {
-                    self.redraw();
-                }
-            }
             UserEvent::Redraw => {
                 if self.running {
                     self.redraw();
@@ -611,7 +593,6 @@ impl ApplicationHandler<UserEvent> for App {
 
 pub fn run(
     proxy_ready: Sender<EventLoopProxy<UserEvent>>,
-    initial_text: String,
     running_flag: Arc<AtomicBool>,
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
@@ -623,15 +604,14 @@ pub fn run(
     let el = el_builder.build().expect("Failed to create event loop");
     let proxy = el.create_proxy();
     let _ = proxy_ready.send(proxy);
-    let (env, renderer) =
-        match create_env_renderer_with_event_loop(&el, initial_text.clone(), config) {
-            Ok(values) => values,
-            Err(err) => {
-                eprintln!("Failed to initialize renderer: {err}");
-                running_flag.store(false, Ordering::Relaxed);
-                return;
-            }
-        };
+    let (env, renderer) = match create_env_renderer_with_event_loop(&el, config) {
+        Ok(values) => values,
+        Err(err) => {
+            eprintln!("Failed to initialize renderer: {err}");
+            running_flag.store(false, Ordering::Relaxed);
+            return;
+        }
+    };
     let size = env.window.inner_size();
     let scale_factor = env.window.scale_factor();
 
@@ -640,7 +620,6 @@ pub fn run(
         renderer: Some(renderer),
         running: true,
         running_flag,
-        current_text: initial_text,
         render_state,
         input_mask,
         input_events,

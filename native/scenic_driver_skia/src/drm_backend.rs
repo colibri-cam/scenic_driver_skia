@@ -612,7 +612,6 @@ fn init_egl(
 fn create_renderer(
     egl: &egl::Egl,
     dimensions: (u32, u32),
-    text: String,
 ) -> Result<Renderer, String> {
     gl::load_with(|s| unsafe {
         let symbol = CString::new(s).expect("gl symbol");
@@ -641,7 +640,7 @@ fn create_renderer(
         }
     };
 
-    Ok(Renderer::new(dimensions, fb_info, gr_context, 0, 0, text))
+    Ok(Renderer::new(dimensions, fb_info, gr_context, 0, 0))
 }
 
 fn framebuffer_for_bo(
@@ -698,7 +697,6 @@ pub struct DrmRunConfig {
 
 pub fn run(
     stop: Arc<AtomicBool>,
-    text: Arc<Mutex<String>>,
     dirty: Arc<AtomicBool>,
     render_state: Arc<Mutex<RenderState>>,
     input_mask: Arc<AtomicU32>,
@@ -879,7 +877,7 @@ pub fn run(
             surface,
         };
 
-        let mut renderer = match create_renderer(&egl_state.egl, dimensions, String::new()) {
+        let mut renderer = match create_renderer(&egl_state.egl, dimensions) {
             Ok(renderer) => renderer,
             Err(e) => {
                 eprintln!("DRM backend unavailable: {e}");
@@ -899,8 +897,6 @@ pub fn run(
 
         let mut framebuffer_cache: HashMap<u32, framebuffer::Handle> = HashMap::new();
 
-        let initial_text = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        renderer.set_text(initial_text);
         if let Ok(state) = render_state.lock() {
             renderer.redraw(&state);
         }
@@ -1032,8 +1028,6 @@ pub fn run(
             }
             last_cursor = cursor;
             if dirty.swap(false, Ordering::Relaxed) {
-                let updated = text.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                renderer.set_text(updated);
                 if let Ok(state) = render_state.lock() {
                     renderer.redraw(&state);
                 }

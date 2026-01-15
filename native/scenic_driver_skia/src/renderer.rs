@@ -300,7 +300,6 @@ pub struct Renderer {
     surface: Surface,
     gr_context: Option<skia_safe::gpu::DirectContext>,
     source: SurfaceSource,
-    text: String,
     scale_factor: f32,
 }
 
@@ -311,7 +310,6 @@ impl Renderer {
         gr_context: skia_safe::gpu::DirectContext,
         num_samples: usize,
         stencil_size: usize,
-        text: String,
     ) -> Self {
         let mut gr_context = gr_context;
         let surface = create_skia_surface(
@@ -330,7 +328,6 @@ impl Renderer {
                 num_samples,
                 stencil_size,
             },
-            text,
             scale_factor: 1.0,
         }
     }
@@ -338,19 +335,13 @@ impl Renderer {
     pub fn from_surface(
         surface: Surface,
         gr_context: Option<skia_safe::gpu::DirectContext>,
-        text: String,
     ) -> Self {
         Self {
             surface,
             gr_context,
             source: SurfaceSource::Raster,
-            text,
             scale_factor: 1.0,
         }
-    }
-
-    pub fn set_text(&mut self, text: String) {
-        self.text = text;
     }
 
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
@@ -380,15 +371,6 @@ impl Renderer {
                 &mut draw_state,
                 &mut stack_ids,
             );
-        }
-
-        if !self.text.is_empty() {
-            let mut paint = Paint::default();
-            paint.set_anti_alias(true);
-            paint.set_color(Color::BLACK);
-            if let Some(font) = default_font(DrawState::DEFAULT_FONT_SIZE).as_ref() {
-                canvas.draw_str(&self.text, (40, 120), font, &paint);
-            }
         }
 
         canvas.restore();
