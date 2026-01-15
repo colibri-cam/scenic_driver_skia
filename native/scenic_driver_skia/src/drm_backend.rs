@@ -609,10 +609,7 @@ fn init_egl(
     Ok((display, context, surface))
 }
 
-fn create_renderer(
-    egl: &egl::Egl,
-    dimensions: (u32, u32),
-) -> Result<Renderer, String> {
+fn create_renderer(egl: &egl::Egl, dimensions: (u32, u32)) -> Result<Renderer, String> {
     gl::load_with(|s| unsafe {
         let symbol = CString::new(s).expect("gl symbol");
         egl.GetProcAddress(symbol.as_ptr()) as *const _
