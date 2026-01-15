@@ -145,6 +145,32 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule RecursiveScriptScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+    alias Scenic.Script
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> script("loop", translate: {10, 10})
+
+      script =
+        Script.start()
+        |> Script.fill_color(:red)
+        |> Script.draw_rectangle(20, 20, :fill)
+        |> script_ref("loop")
+        |> Script.finish()
+
+      scene = Scenic.Scene.push_script(scene, script, "loop")
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+
+    defp script_ref(ops, id) do
+      [{:script, id} | ops]
+    end
+  end
+
   defmodule LineScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -704,6 +730,29 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert pixel_at(frame, width, 20, 20) == {255, 255, 255}
     # Inside the rectangle but outside the circle should remain background.
     assert pixel_at(frame, width, 35, 35) == {0, 0, 0}
+  end
+
+  test "draw_script recursion guard prevents infinite loop" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: RecursiveScriptScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        red_pixel?(pixel_at(data, w, 15, 15))
+      end)
+
+    # The recursive script should still render its rectangle once.
+    assert red_pixel?(pixel_at(frame, width, 15, 15))
   end
 
   test "draw_rect stroke only renders expected pixels" do
