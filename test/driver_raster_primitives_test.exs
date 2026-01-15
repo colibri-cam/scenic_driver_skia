@@ -541,6 +541,21 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     end
   end
 
+  defmodule RadialStrokeScene do
+    use Scenic.Scene
+    import Scenic.Primitives
+
+    def init(scene, _args, _opts) do
+      graph =
+        Scenic.Graph.build()
+        |> line({{10, 20}, {30, 20}},
+          stroke: {6, {:radial, {20, 20, 0, 10, :red, :blue}}}
+        )
+
+      {:ok, Scenic.Scene.push_graph(scene, graph)}
+    end
+  end
+
   defmodule ImageFillScene do
     use Scenic.Scene
     import Scenic.Primitives
@@ -1613,6 +1628,29 @@ defmodule Scenic.Driver.Skia.RasterPrimitivesTest do
     assert red_dominant?(pixel_at(frame, width, 12, 20))
     # Right side is closer to blue.
     assert blue_dominant?(pixel_at(frame, width, 28, 20))
+  end
+
+  test "radial gradient stroke renders along the line" do
+    assert {:ok, _} = Application.ensure_all_started(:scenic_driver_skia)
+
+    vp = ViewPortHelper.start(size: {64, 64}, scene: RadialStrokeScene)
+    renderer = ViewPortHelper.renderer(vp)
+
+    on_exit(fn ->
+      if Process.alive?(vp.pid) do
+        _ = ViewPort.stop(vp)
+      end
+
+      _ = Native.stop(renderer)
+    end)
+
+    {width, _height, frame} =
+      wait_for_frame!(renderer, 40, fn {w, _h, data} ->
+        any_non_background?(data, w, 12..28, 18..22)
+      end)
+
+    # Stroke sample somewhere in the line region.
+    assert any_non_background?(frame, width, 12..28, 18..22)
   end
 
   test "image fill repeats across the rect" do
