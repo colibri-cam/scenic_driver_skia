@@ -76,7 +76,6 @@ rustler::atoms! {
 pub struct InputQueue {
     events: VecDeque<InputEvent>,
     target: Option<LocalPid>,
-    notified: bool,
 }
 
 impl InputQueue {
@@ -84,35 +83,27 @@ impl InputQueue {
         Self {
             events: VecDeque::new(),
             target: None,
-            notified: false,
         }
     }
 
     pub fn push_event(&mut self, event: InputEvent) -> Option<LocalPid> {
-        self.events.push_back(event);
-        if self.notified {
-            return None;
+        // For cursor position events, replace any existing one to avoid stale positions
+        if matches!(event, InputEvent::CursorPos { .. }) {
+            self.events
+                .retain(|e| !matches!(e, InputEvent::CursorPos { .. }));
         }
-        let target = self.target?;
-        self.notified = true;
-        Some(target)
+        self.events.push_back(event);
+        // Always notify when events are pushed - removes batching delay
+        self.target
     }
 
-    pub fn set_target(&mut self, target: Option<LocalPid>) -> Option<LocalPid> {
+    pub fn set_target(&mut self, target: Option<LocalPid>) {
         self.target = target;
-        if self.notified {
-            return None;
-        }
-        if self.events.is_empty() {
-            return None;
-        }
-        let target = self.target?;
-        self.notified = true;
-        Some(target)
+        // Don't return notification target - this is called from NIF context (managed thread)
+        // which cannot use OwnedEnv::send_and_clear. Events will be picked up on next push.
     }
 
     pub fn drain(&mut self) -> Vec<InputEvent> {
-        self.notified = false;
         self.events.drain(..).collect()
     }
 }

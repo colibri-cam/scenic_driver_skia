@@ -66,6 +66,9 @@ struct App {
     window_size: (u32, u32),
     scale_factor: f64,
     modifiers: ModifiersState,
+    /// Tracks if we've sent an input notification this event loop iteration.
+    /// Reset in about_to_wait to allow one notification per iteration.
+    notified_this_iteration: bool,
 }
 
 impl App {
@@ -105,13 +108,18 @@ impl App {
 
     fn redraw(&mut self) {
         if let (Some(env), Some(renderer)) = (self.env.as_mut(), self.renderer.as_mut()) {
-            if let Ok(render_state) = self.render_state.lock() {
+            // Use try_lock to avoid blocking the event loop if NIFs are updating render state.
+            // This prevents "Application Not Responding" when scene updates are being processed.
+            if let Ok(render_state) = self.render_state.try_lock() {
                 renderer.set_scale_factor(self.scale_factor as f32);
                 renderer.redraw(&render_state);
+                env.gl_surface
+                    .swap_buffers(&env.gl_context)
+                    .expect("swap_buffers failed");
+            } else {
+                // Lock not available - request another redraw to try again soon
+                env.window.request_redraw();
             }
-            env.gl_surface
-                .swap_buffers(&env.gl_context)
-                .expect("swap_buffers failed");
         }
     }
 
@@ -153,15 +161,19 @@ impl App {
         }
     }
 
-    fn push_input(&self, event: InputEvent) {
+    fn push_input(&mut self, event: InputEvent) {
         let notify = if let Ok(mut queue) = self.input_events.lock() {
             queue.push_event(event)
         } else {
             None
         };
 
-        if let Some(pid) = notify {
+        // Only notify once per event loop iteration to avoid flooding the BEAM
+        if !self.notified_this_iteration
+            && let Some(pid) = notify
+        {
             notify_input_ready(pid);
+            self.notified_this_iteration = true;
         }
     }
 }
@@ -589,6 +601,12 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
     }
+
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        // Reset notification flag at end of each event loop iteration.
+        // This allows one input notification per iteration - responsive but not flooding.
+        self.notified_this_iteration = false;
+    }
 }
 
 pub fn run(
@@ -630,6 +648,7 @@ pub fn run(
         window_size: (size.width, size.height),
         scale_factor,
         modifiers: ModifiersState::empty(),
+        notified_this_iteration: false,
     };
     app.redraw();
     el.run_app(&mut app).expect("run_app failed");

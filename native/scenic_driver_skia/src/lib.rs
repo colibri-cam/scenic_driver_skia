@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use backend::UserEvent;
 use cursor::CursorState;
-use input::{InputEvent, InputQueue, notify_input_ready};
+use input::{InputEvent, InputQueue};
 use renderer::{RenderState, ScriptOp};
 use rustler::{Binary, Env, OwnedBinary, ResourceArc, Term};
 use skia_safe::ClipOp;
@@ -503,13 +503,8 @@ pub fn set_input_target(
             .input_events
             .lock()
             .map_err(|_| "input queue lock poisoned".to_string())?;
-        let notify = queue.set_target(pid);
-        drop(queue);
-
-        if let Some(pid) = notify {
-            notify_input_ready(pid);
-        }
-
+        queue.set_target(pid);
+        // Don't notify from NIF context - managed threads can't use OwnedEnv::send_and_clear
         Ok(())
     })
 }
@@ -541,12 +536,63 @@ fn set_script(state: &mut RenderState, id: String, ops: Vec<ScriptOp>) {
 fn is_known_opcode(opcode: u16) -> bool {
     matches!(
         opcode,
-        0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x08 | 0x09 | 0x0A | 0x0B
-            | 0x0C | 0x0F | 0x20 | 0x21 | 0x22 | 0x23 | 0x26 | 0x27 | 0x28 | 0x29 | 0x2A
-            | 0x2B | 0x2C | 0x2D | 0x2E | 0x2F | 0x30 | 0x31 | 0x32 | 0x40 | 0x41 | 0x42
-            | 0x44 | 0x45 | 0x50 | 0x51 | 0x52 | 0x53 | 0x60 | 0x61 | 0x62 | 0x63 | 0x64
-            | 0x70 | 0x71 | 0x72 | 0x73 | 0x74 | 0x75 | 0x80 | 0x81 | 0x82 | 0x90 | 0x91
-            | 0x92 | 0x93
+        0x00 | 0x01
+            | 0x02
+            | 0x03
+            | 0x04
+            | 0x05
+            | 0x06
+            | 0x07
+            | 0x08
+            | 0x09
+            | 0x0A
+            | 0x0B
+            | 0x0C
+            | 0x0F
+            | 0x20
+            | 0x21
+            | 0x22
+            | 0x23
+            | 0x26
+            | 0x27
+            | 0x28
+            | 0x29
+            | 0x2A
+            | 0x2B
+            | 0x2C
+            | 0x2D
+            | 0x2E
+            | 0x2F
+            | 0x30
+            | 0x31
+            | 0x32
+            | 0x40
+            | 0x41
+            | 0x42
+            | 0x44
+            | 0x45
+            | 0x50
+            | 0x51
+            | 0x52
+            | 0x53
+            | 0x60
+            | 0x61
+            | 0x62
+            | 0x63
+            | 0x64
+            | 0x70
+            | 0x71
+            | 0x72
+            | 0x73
+            | 0x74
+            | 0x75
+            | 0x80
+            | 0x81
+            | 0x82
+            | 0x90
+            | 0x91
+            | 0x92
+            | 0x93
     )
 }
 
@@ -648,9 +694,7 @@ fn parse_script(script: &[u8]) -> Result<Vec<ScriptOp>, String> {
         let without_alpha = parse_sprite_cmds_without_alpha(cmds_bytes, count).ok();
 
         let alpha_candidate = with_alpha.and_then(|(cmds, tail)| {
-            let alpha_ok = cmds
-                .iter()
-                .all(|cmd| cmd.alpha >= 0.0 && cmd.alpha <= 1.0);
+            let alpha_ok = cmds.iter().all(|cmd| cmd.alpha >= 0.0 && cmd.alpha <= 1.0);
             if alpha_ok && next_opcode_valid(tail) {
                 Some((cmds, tail))
             } else {
