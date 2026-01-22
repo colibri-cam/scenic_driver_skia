@@ -19,6 +19,7 @@ defmodule Scenic.Driver.Skia do
   alias Scenic.Driver
 
   alias Scenic.Driver.Skia.Native
+  alias Scenic.Driver.Skia.Runtime
   alias Scenic.Assets.Static
   alias Scenic.Assets.Stream
   alias Scenic.{Script, ViewPort}
@@ -62,6 +63,10 @@ defmodule Scenic.Driver.Skia do
   """
   @impl Scenic.Driver
   def init(driver, opts) do
+    # Set up auxiliary runtime paths (GBM, XKB, libinput quirks)
+    # Note: LD_LIBRARY_PATH must be set BEFORE BEAM starts (in vm.args.eex)
+    Runtime.setup()
+
     Logger.info("Scenic.Driver.Skia init: #{inspect(opts)}")
 
     viewport_size = normalize_viewport_size(driver.viewport.size)
