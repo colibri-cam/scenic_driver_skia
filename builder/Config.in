@@ -1,0 +1,10 @@
+# Scenic Driver Skia cross-compilation support
+#
+# This buildroot extension provides a sysroot for cross-compiling
+# the scenic_driver_skia Rustler NIF.
+#
+# rust-skia handles building Skia from source, so no custom packages
+# are needed here - we just use standard Buildroot packages for the
+# required dependencies (Mesa, libdrm, fontconfig, etc.)
+
+# No custom packages needed - all dependencies are standard Buildroot packages

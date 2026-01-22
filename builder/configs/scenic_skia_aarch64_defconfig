@@ -1,0 +1,122 @@
+# Scenic Driver Skia - aarch64 cross-compilation sysroot
+#
+# This configuration builds a sysroot with all dependencies needed for
+# cross-compiling scenic_driver_skia (Rustler NIF with Skia).
+#
+# rust-skia builds Skia from source, so we only need to provide:
+# - Graphics libraries (Mesa, libdrm, GBM)
+# - Font libraries (fontconfig, freetype)
+# - Image libraries (libpng, jpeg, webp)
+# - Input libraries (libinput, libevdev, eudev)
+# - Text/Unicode support (ICU)
+
+# Architecture
+BR2_aarch64=y
+
+# Use global patch directory for any package patches
+BR2_GLOBAL_PATCH_DIR="$(BR2_EXTERNAL_SKIA_CROSS_PATH)/patches"
+
+# Toolchain - Use pre-built Nerves toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/nerves-project/toolchains/releases/download/v13.2.0/nerves_toolchain_aarch64_nerves_linux_gnu-linux_${shell uname -m}-13.2.0-CE4B5F8.tar.xz"
+BR2_TOOLCHAIN_EXTERNAL_PREFIX="aarch64-nerves-linux-gnu"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="aarch64-nerves-linux-gnu"
+BR2_TOOLCHAIN_EXTERNAL_GCC_13=y
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_4=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_GLIBC=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+BR2_TOOLCHAIN_EXTERNAL_FORTRAN=y
+BR2_TOOLCHAIN_EXTERNAL_INET_RPC=n
+BR2_TOOLCHAIN_EXTERNAL_OPENMP=y
+BR2_TOOLCHAIN_EXTERNAL_HAS_SSP=y
+BR2_TOOLCHAIN_EXTERNAL_HAS_SSP_STRONG=y
+
+# System configuration - minimal, we only need the sysroot
+BR2_TARGET_GENERIC_HOSTNAME="scenic-skia-sysroot"
+BR2_TARGET_GENERIC_ISSUE="Scenic Driver Skia cross-compilation sysroot"
+BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
+
+# Security and hardening
+BR2_REPRODUCIBLE=y
+BR2_PIC_PIE=y
+BR2_SSP_STRONG=y
+BR2_RELRO_FULL=y
+
+# Optimization
+BR2_OPTIMIZE_2=y
+
+# Library configuration - shared libraries for the sysroot
+BR2_SHARED_LIBS=y
+
+# ============================================
+# Graphics stack (required for Skia GPU rendering)
+# ============================================
+
+# Mesa3D - OpenGL ES / EGL implementation
+BR2_PACKAGE_MESA3D=y
+BR2_PACKAGE_MESA3D_GALLIUM_DRIVER=y
+# Raspberry Pi 4/5 GPU drivers
+BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_V3D=y
+BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_VC4=y
+BR2_PACKAGE_MESA3D_GBM=y
+BR2_PACKAGE_MESA3D_OPENGL_EGL=y
+BR2_PACKAGE_MESA3D_OPENGL_ES=y
+
+# DRM/Display support
+BR2_PACKAGE_LIBDRM=y
+BR2_PACKAGE_LIBDRM_VC4=y
+
+# Wayland support (required for windowed mode)
+BR2_PACKAGE_WAYLAND=y
+BR2_PACKAGE_WAYLAND_PROTOCOLS=y
+
+# ============================================
+# Input support (for DRM backend)
+# ============================================
+
+BR2_PACKAGE_EUDEV=y
+BR2_PACKAGE_EUDEV_ENABLE_HWDB=y
+BR2_PACKAGE_LIBINPUT=y
+BR2_PACKAGE_LIBEVDEV=y
+BR2_PACKAGE_LIBXKBCOMMON=y
+BR2_PACKAGE_XKEYBOARD_CONFIG=y
+
+# ============================================
+# Font rendering (required for Skia text)
+# ============================================
+
+BR2_PACKAGE_FONTCONFIG=y
+BR2_PACKAGE_FREETYPE=y
+
+# ============================================
+# Image formats (for Skia image codecs)
+# ============================================
+
+BR2_PACKAGE_LIBPNG=y
+BR2_PACKAGE_JPEG=y
+BR2_PACKAGE_WEBP=y
+
+# ============================================
+# Core libraries
+# ============================================
+
+BR2_PACKAGE_ZLIB=y
+BR2_PACKAGE_EXPAT=y
+
+# ICU for Skia text layout and Unicode support
+BR2_PACKAGE_ICU=y
+
+# ============================================
+# Host tools (for build process)
+# ============================================
+
+# patchelf for setting RPATH on runtime libraries
+BR2_PACKAGE_HOST_PATCHELF=y
+
+# ============================================
+# Filesystem output - minimal, we only use staging
+# ============================================
+
+BR2_TARGET_ROOTFS_TAR=y
