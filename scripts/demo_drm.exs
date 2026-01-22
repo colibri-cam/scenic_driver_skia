@@ -124,7 +124,7 @@ defmodule ScenicDriverSkia.DemoDrm do
       {:noreply, scene}
     end
 
-    def handle_input({:viewport, {:reshape, _size}}, _context, scene) do
+    def handle_input({:viewport, {:reshape, _size, _scale}}, _context, scene) do
       {width, height} = current_viewport_size(scene)
       Logger.info("viewport reshape -> ViewPort size now #{width}x#{height}")
       text = "viewport_size: #{width}x#{height}"

@@ -494,8 +494,10 @@ fn load_egl() -> Result<(Library, egl::Egl), String> {
     let lib = unsafe { Library::new("libEGL.so.1") }
         .map_err(|e| format!("failed to load libEGL: {e}"))?;
     let get_proc = unsafe {
-        lib.get::<unsafe extern "system" fn(*const i8) -> *const c_void>(b"eglGetProcAddress\0")
-            .map_err(|e| format!("failed to load eglGetProcAddress: {e}"))?
+        lib.get::<unsafe extern "system" fn(*const std::ffi::c_char) -> *const c_void>(
+            b"eglGetProcAddress\0",
+        )
+        .map_err(|e| format!("failed to load eglGetProcAddress: {e}"))?
     };
 
     let egl = egl::Egl::load_with(|name| unsafe {
@@ -609,10 +611,7 @@ fn init_egl(
     Ok((display, context, surface))
 }
 
-fn create_renderer(
-    egl: &egl::Egl,
-    dimensions: (u32, u32),
-) -> Result<Renderer, String> {
+fn create_renderer(egl: &egl::Egl, dimensions: (u32, u32)) -> Result<Renderer, String> {
     gl::load_with(|s| unsafe {
         let symbol = CString::new(s).expect("gl symbol");
         egl.GetProcAddress(symbol.as_ptr()) as *const _
@@ -804,8 +803,9 @@ pub fn run(
             && let Ok(mut queue) = input_events.lock()
         {
             let notify = queue.push_event(InputEvent::ViewportReshape {
-                width: dimensions.0,
-                height: dimensions.1,
+                physical_width: dimensions.0,
+                physical_height: dimensions.1,
+                scale_factor: 1.0,
             });
             if let Some(pid) = notify {
                 notify_input_ready(pid);

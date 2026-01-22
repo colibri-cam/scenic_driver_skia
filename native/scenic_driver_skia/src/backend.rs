@@ -20,7 +20,7 @@ use raw_window_handle::HasWindowHandle;
 use skia_safe::gpu::gl::FramebufferInfo;
 use winit::{
     application::ApplicationHandler,
-    dpi::{LogicalPosition, LogicalSize},
+    dpi::LogicalSize,
     event::{ElementState, MouseScrollDelta, WindowEvent},
     event_loop::{EventLoop, EventLoopProxy},
     keyboard::{Key, KeyLocation, ModifiersState, NamedKey},
@@ -70,27 +70,23 @@ struct App {
 }
 
 impl App {
-    fn logical_size(&self, physical: winit::dpi::PhysicalSize<u32>) -> (u32, u32) {
-        let logical: LogicalSize<f64> = physical.to_logical(self.scale_factor);
-        (logical.width.round() as u32, logical.height.round() as u32)
-    }
-
-    fn handle_resize(&mut self, physical_size: winit::dpi::PhysicalSize<u32>) {
+    fn handle_resize(&mut self, physical_size: winit::dpi::PhysicalSize<u32>, force_metrics: bool) {
         if !self.running {
             return;
         }
 
         let (w, h): (u32, u32) = physical_size.into();
-        if (w, h) != self.window_size {
+        let size_changed = (w, h) != self.window_size;
+        if size_changed {
             self.window_size = (w, h);
-            let mask = self.input_mask.load(Ordering::Relaxed);
-            if mask & INPUT_MASK_VIEWPORT != 0 {
-                let (logical_w, logical_h) = self.logical_size(physical_size);
-                self.push_input(InputEvent::ViewportReshape {
-                    width: logical_w,
-                    height: logical_h,
-                });
-            }
+        }
+        let mask = self.input_mask.load(Ordering::Relaxed);
+        if mask & INPUT_MASK_VIEWPORT != 0 && (size_changed || force_metrics) {
+            self.push_input(InputEvent::ViewportReshape {
+                physical_width: w,
+                physical_height: h,
+                scale_factor: self.scale_factor as f32,
+            });
         }
         if let (Some(env), Some(renderer)) = (self.env.as_mut(), self.renderer.as_mut()) {
             env.gl_surface.resize(
@@ -109,7 +105,7 @@ impl App {
             // Use try_lock to avoid blocking the event loop if NIFs are updating render state.
             // This prevents "Application Not Responding" when scene updates are being processed.
             if let Ok(render_state) = self.render_state.try_lock() {
-                renderer.set_scale_factor(self.scale_factor as f32);
+                renderer.set_scale_factor(1.0);
                 renderer.redraw(&render_state);
                 env.gl_surface
                     .swap_buffers(&env.gl_context)
@@ -479,9 +475,8 @@ impl ApplicationHandler<UserEvent> for App {
 
             WindowEvent::CursorMoved { position, .. } => {
                 let mask = self.input_mask.load(Ordering::Relaxed);
-                let logical: LogicalPosition<f64> = position.to_logical(self.scale_factor);
-                let x = logical.x as f32;
-                let y = logical.y as f32;
+                let x = position.x as f32;
+                let y = position.y as f32;
                 self.cursor_pos = (x, y);
                 if mask & INPUT_MASK_CURSOR_POS != 0 {
                     self.push_input(InputEvent::CursorPos { x, y });
@@ -537,10 +532,7 @@ impl ApplicationHandler<UserEvent> for App {
                 if mask & INPUT_MASK_CURSOR_SCROLL != 0 {
                     let (dx, dy) = match delta {
                         MouseScrollDelta::LineDelta(x, y) => (x, y),
-                        MouseScrollDelta::PixelDelta(pos) => {
-                            let logical: LogicalPosition<f64> = pos.to_logical(self.scale_factor);
-                            (logical.x as f32, logical.y as f32)
-                        }
+                        MouseScrollDelta::PixelDelta(pos) => (pos.x as f32, pos.y as f32),
                     };
                     let (x, y) = self.cursor_pos;
                     self.push_input(InputEvent::CursorScroll { dx, dy, x, y });
@@ -550,7 +542,7 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::CloseRequested => self.set_running(_event_loop, false),
 
             WindowEvent::Resized(physical_size) => {
-                self.handle_resize(physical_size);
+                self.handle_resize(physical_size, false);
             }
 
             WindowEvent::ScaleFactorChanged {
@@ -559,7 +551,7 @@ impl ApplicationHandler<UserEvent> for App {
             } => {
                 self.scale_factor = scale_factor;
                 if let Some(env) = self.env.as_ref() {
-                    self.handle_resize(env.window.inner_size());
+                    self.handle_resize(env.window.inner_size(), true);
                 }
             }
 

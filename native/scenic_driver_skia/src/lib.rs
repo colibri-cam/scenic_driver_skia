@@ -61,9 +61,7 @@ pub fn start(
     viewport_size: Option<(u32, u32)>,
     window_title: String,
     window_resizeable: bool,
-    drm_card: Option<String>,
-    drm_hw_cursor: bool,
-    drm_input_log: bool,
+    drm_config: Option<(Option<String>, bool, bool)>,
 ) -> Result<ResourceArc<RendererResource>, String> {
     let backend = backend
         .map(|b| b.to_lowercase())
@@ -74,6 +72,7 @@ pub fn start(
     let input_events = Arc::new(Mutex::new(InputQueue::new()));
     let input_mask = Arc::new(AtomicU32::new(0));
     let running = Arc::new(AtomicBool::new(true));
+    let (drm_card, drm_hw_cursor, drm_input_log) = drm_config.unwrap_or((None, true, false));
     let handle = if backend == "drm" {
         let stop = Arc::new(AtomicBool::new(false));
         let dirty = Arc::new(AtomicBool::new(false));
@@ -2453,8 +2452,9 @@ mod tests {
             mods: 0,
         });
         queue.push_event(InputEvent::ViewportReshape {
-            width: 1280,
-            height: 720,
+            physical_width: 1280,
+            physical_height: 720,
+            scale_factor: 1.0,
         });
         let input_events = Arc::new(Mutex::new(queue));
 

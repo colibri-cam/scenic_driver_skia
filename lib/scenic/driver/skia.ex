@@ -78,14 +78,14 @@ defmodule Scenic.Driver.Skia do
     drm_hw_cursor = Keyword.get(drm_opts, :hw_cursor, true)
     drm_input_log = Keyword.get(drm_opts, :input_log, false)
 
+    drm_config = {drm_card, drm_hw_cursor, drm_input_log}
+
     case Native.start(
            opts[:backend],
            viewport_size,
            window_title,
            window_resizeable,
-           drm_card,
-           drm_hw_cursor,
-           drm_input_log
+           drm_config
          ) do
       {:ok, renderer} ->
         maybe_set_input_target(renderer, self())
@@ -380,7 +380,7 @@ defmodule Scenic.Driver.Skia do
   def start(backend) when is_atom(backend) or is_binary(backend) do
     backend
     |> normalize_backend()
-    |> Native.start(nil, "Scenic Window", false, nil, true, false)
+    |> Native.start(nil, "Scenic Window", false, {nil, true, false})
   end
 
   @doc """

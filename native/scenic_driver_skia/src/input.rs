@@ -36,8 +36,9 @@ pub enum InputEvent {
         y: f32,
     },
     ViewportReshape {
-        width: u32,
-        height: u32,
+        physical_width: u32,
+        physical_height: u32,
+        scale_factor: f32,
     },
 }
 
@@ -172,9 +173,19 @@ impl Encoder for InputEvent {
                 let dir = if *entered { enter() } else { exit() };
                 (viewport(), (dir, (*x, *y))).encode(env)
             }
-            InputEvent::ViewportReshape { width, height } => {
-                (viewport(), (reshape(), (*width, *height))).encode(env)
-            }
+            InputEvent::ViewportReshape {
+                physical_width,
+                physical_height,
+                scale_factor,
+            } => (
+                viewport(),
+                (
+                    reshape(),
+                    (*physical_width, *physical_height),
+                    *scale_factor,
+                ),
+            )
+                .encode(env),
         }
     }
 }

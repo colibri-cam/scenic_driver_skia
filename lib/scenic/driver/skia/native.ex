@@ -17,9 +17,7 @@ defmodule Scenic.Driver.Skia.Native do
         _viewport_size,
         _window_title,
         _resizeable,
-        _drm_card,
-        _drm_hw_cursor,
-        _drm_input_log
+        _drm_config
       ),
       do: :erlang.nif_error(:nif_not_loaded)
 

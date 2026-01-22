@@ -5,12 +5,15 @@ defmodule ScenicDriverSkia.DemoWayland do
     alias Scenic.Script
 
     def init(scene, _args, _opts) do
-      #scene = Scenic.Scene.push_script(scene, build_rrectv_script(), "rrectv_demo")
+      :ok = Scenic.Scene.request_input(scene, [:viewport])
+
+      scene = Scenic.Scene.push_script(scene, build_rrectv_script(), "rrectv_demo")
       scene = Scenic.Scene.push_script(scene, build_path_shape_script(), "path_shape_demo")
       scene = Scenic.Scene.push_script(scene, build_clip_path_script(), "clip_path_demo")
       scene = Scenic.Scene.assign(scene, join_miter_limit: 1)
+      scene = Scenic.Scene.assign(scene, viewport_scale: 1.0)
       scene = schedule_join_tick(scene)
-      graph = build_graph(scene.assigns.join_miter_limit)
+      graph = build_graph(scene.assigns.join_miter_limit, scene.assigns.viewport_scale)
       {:ok, Scenic.Scene.push_graph(scene, graph)}
     end
 
@@ -24,12 +27,25 @@ defmodule ScenicDriverSkia.DemoWayland do
       scene =
         scene
         |> Scenic.Scene.assign(join_miter_limit: limit)
-        |> Scenic.Scene.push_graph(build_graph(limit))
+        |> Scenic.Scene.push_graph(build_graph(limit, scene.assigns.viewport_scale))
 
       {:noreply, schedule_join_tick(scene)}
     end
 
-    defp build_graph(join_miter_limit) do
+    def handle_input({:viewport, {:reshape, _size, scale}}, _context, scene) do
+      scene =
+        scene
+        |> Scenic.Scene.assign(viewport_scale: scale)
+        |> Scenic.Scene.push_graph(build_graph(scene.assigns.join_miter_limit, scale))
+
+      {:noreply, scene}
+    end
+
+    def handle_input(_event, _context, scene) do
+      {:noreply, scene}
+    end
+
+    defp build_graph(join_miter_limit, scale) do
       x1 = 60
       x2 = 470
       x3 = 880
@@ -40,6 +56,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       y3 = 580
       y4 = 800
       label_offset = 120
+
       sprite_cmds = [
         {{0, 0}, {120, 80}, {0, 0}, {120, 80}},
         {{200, 80}, {120, 80}, {60, 30}, {120, 80}, 0.6}
@@ -58,146 +75,156 @@ defmodule ScenicDriverSkia.DemoWayland do
       ]
 
       Scenic.Graph.build(font_size: 20)
-      |> rect({200, 120}, fill: :blue, stroke: {3, :white}, translate: {x1, y1})
-      |> text("rect", fill: :white, translate: {x1, y1 + label_offset})
-      |> rounded_rectangle({200, 120, 20},
-        fill: :purple,
-        stroke: {3, :white},
-        translate: {x2, y1}
+      |> group(
+        fn graph ->
+          graph
+          |> rect({200, 120}, fill: :blue, stroke: {3, :white}, translate: {x1, y1})
+          |> text("rect", fill: :white, translate: {x1, y1 + label_offset})
+          |> rounded_rectangle({200, 120, 20},
+            fill: :purple,
+            stroke: {3, :white},
+            translate: {x2, y1}
+          )
+          |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
+          |> script("rrectv_demo", translate: {x3, y1})
+          |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
+          |> rect({200, 120},
+            fill: {:radial, {100, 60, 0, 80, :red, :blue}},
+            translate: {x5, y1}
+          )
+          |> text("radial gradient", fill: :white, translate: {x5, y1 + label_offset})
+          |> script("path_shape_demo", translate: {x5, y2})
+          |> text("script path ops", fill: :white, translate: {x5, y2 + label_offset})
+          |> sprites({:stock, sprite_cmds}, translate: {x5, y2 + 140})
+          |> text("sprites", fill: :white, translate: {x5, y2 + 230})
+          |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :butt, translate: {x1, y2})
+          |> text("cap: butt", fill: :white, translate: {x1, y2 + 30})
+          |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :round, translate: {x1, y2 + 50})
+          |> text("cap: round", fill: :white, translate: {x1, y2 + 80})
+          |> line({{0, 0}, {200, 0}},
+            stroke: {10, :white},
+            cap: :square,
+            translate: {x1, y2 + 100}
+          )
+          |> text("cap: square", fill: :white, translate: {x1, y2 + 130})
+          |> circle(55, fill: :green, stroke: {3, :white}, translate: {x2 + 100, y2 + 60})
+          |> text("circle", fill: :white, translate: {x2, y2 + label_offset})
+          |> ellipse({70, 45}, fill: :orange, stroke: {3, :white}, translate: {x3 + 100, y2 + 60})
+          |> text("ellipse", fill: :white, translate: {x3, y2 + label_offset})
+          |> triangle({{0, 120}, {100, 0}, {200, 120}},
+            fill: :pink,
+            stroke: {3, :white},
+            translate: {x4, y2}
+          )
+          |> text("triangle", fill: :white, translate: {x4, y2 + label_offset})
+          |> quad({{0, 0}, {215, 0}, {185, 120}, {0, 140}},
+            fill: :olive,
+            stroke: {3, :white},
+            join: :round,
+            miter_limit: 2,
+            translate: {x4, y1}
+          )
+          |> text("quad", fill: :white, translate: {x4, y1 + label_offset})
+          |> arc({70, 1.6}, stroke: {6, :white}, translate: {x1 + 100, y3 + 60})
+          |> text("arc", fill: :white, translate: {x1, y3 + label_offset})
+          |> sector({70, 1.2}, fill: :teal, stroke: {3, :white}, translate: {x2 + 100, y3 + 60})
+          |> text("sector", fill: :white, translate: {x2, y3 + label_offset})
+          |> script("clip_path_demo", translate: {x2, y3 + 140})
+          |> text("clip path", fill: :white, translate: {x2, y3 + 230})
+          |> path(path_commands,
+            fill: :maroon,
+            stroke: {3, :white},
+            translate: {x4, y3}
+          )
+          |> text("path", fill: :white, translate: {x4, y3 + label_offset})
+          |> rect({200, 120},
+            fill: {:image, :stock},
+            translate: {x5, y3}
+          )
+          |> text("image", fill: :white, translate: {x5, y3 + label_offset})
+          |> line({{0, 0}, {200, 0}},
+            stroke: {12, {:image, :stock}},
+            translate: {x5, y3 + 150}
+          )
+          |> text("image stroke", fill: :white, translate: {x5, y3 + 180})
+          |> rect({200, 120},
+            fill: :red,
+            scissor: {120, 60},
+            translate: {x1, y4}
+          )
+          |> text("scissor", fill: :white, translate: {x1, y4 + label_offset})
+          |> line({{0, 0}, {200, 0}},
+            stroke: {12, {:linear, {0, 0, 200, 0, :red, :blue}}},
+            translate: {x1, y4 + 150}
+          )
+          |> text("linear stroke", fill: :white, translate: {x1, y4 + 180})
+          |> rect({200, 120},
+            fill: {:color_rgba, {255, 0, 0, 128}},
+            translate: {x3, y4}
+          )
+          |> text("alpha 0.5", fill: :white, translate: {x3, y4 + label_offset})
+          |> rect({200, 80},
+            fill: {:linear, {0, 0, 200, 0, :red, :blue}},
+            translate: {x3, y4 + 150}
+          )
+          |> text("linear gradient", fill: :white, translate: {x3, y4 + 240})
+          |> rect({200, 120},
+            fill: {:stream, "demo_stream"},
+            translate: {x5, y4}
+          )
+          |> text("stream", fill: :white, translate: {x5, y4 + label_offset})
+          |> line({{0, 0}, {200, 0}},
+            stroke: {12, {:stream, "demo_stream"}},
+            translate: {x5, y4 + 150}
+          )
+          |> text("stream stroke", fill: :white, translate: {x5, y4 + 180})
+          |> path(
+            [
+              :begin,
+              {:move_to, 0, 160},
+              {:line_to, 100, 0},
+              {:line_to, 200, 160}
+            ],
+            stroke: {24, :white},
+            join: :miter,
+            miter_limit: join_miter_limit,
+            translate: {x2, y4}
+          )
+          |> line({{0, 160}, {100, 0}}, stroke: {2, :red}, translate: {x2, y4})
+          |> line({{100, 0}, {200, 160}}, stroke: {2, :blue}, translate: {x2, y4})
+          |> text("join: miter (limit #{join_miter_limit})",
+            fill: :white,
+            translate: {x2, y4 + 120}
+          )
+          |> path(
+            [
+              :begin,
+              {:move_to, 0, 80},
+              {:line_to, 100, 0},
+              {:line_to, 200, 80}
+            ],
+            stroke: {10, :white},
+            join: :bevel,
+            translate: {x4, y4}
+          )
+          |> text("join: bevel", fill: :white, translate: {x4, y4 + 100})
+          |> path(
+            [
+              :begin,
+              {:move_to, 0, 80},
+              {:line_to, 100, 0},
+              {:line_to, 200, 80}
+            ],
+            stroke: {10, :white},
+            join: :round,
+            translate: {x4, y4 + 140}
+          )
+          |> text("join: round", fill: :white, translate: {x4, y4 + 240})
+          |> text("text", fill: :yellow, font_size: 30, translate: {x3, y3 + 70})
+          |> text("text", fill: :white, translate: {x3, y3 + label_offset})
+        end,
+        scale: {scale, scale}
       )
-      |> text("rrect", fill: :white, translate: {x2, y1 + label_offset})
-      #|> script("rrectv_demo", translate: {x3, y1})
-      |> text("rrectv", fill: :white, translate: {x3, y1 + label_offset})
-      |> rect({200, 120},
-        fill: {:radial, {100, 60, 0, 80, :red, :blue}},
-        translate: {x5, y1}
-      )
-      |> text("radial gradient", fill: :white, translate: {x5, y1 + label_offset})
-      |> script("path_shape_demo", translate: {x5, y2})
-      |> text("script path ops", fill: :white, translate: {x5, y2 + label_offset})
-      |> sprites({:stock, sprite_cmds}, translate: {x5, y2 + 140})
-      |> text("sprites", fill: :white, translate: {x5, y2 + 230})
-      |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :butt, translate: {x1, y2})
-      |> text("cap: butt", fill: :white, translate: {x1, y2 + 30})
-      |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :round, translate: {x1, y2 + 50})
-      |> text("cap: round", fill: :white, translate: {x1, y2 + 80})
-      |> line({{0, 0}, {200, 0}}, stroke: {10, :white}, cap: :square, translate: {x1, y2 + 100})
-      |> text("cap: square", fill: :white, translate: {x1, y2 + 130})
-      |> circle(55, fill: :green, stroke: {3, :white}, translate: {x2 + 100, y2 + 60})
-      |> text("circle", fill: :white, translate: {x2, y2 + label_offset})
-      |> ellipse({70, 45}, fill: :orange, stroke: {3, :white}, translate: {x3 + 100, y2 + 60})
-      |> text("ellipse", fill: :white, translate: {x3, y2 + label_offset})
-      |> triangle({{0, 120}, {100, 0}, {200, 120}},
-        fill: :pink,
-        stroke: {3, :white},
-        translate: {x4, y2}
-      )
-      |> text("triangle", fill: :white, translate: {x4, y2 + label_offset})
-      |> quad({{0, 0}, {215, 0}, {185, 120}, {0, 140}},
-        fill: :olive,
-        stroke: {3, :white},
-        join: :round,
-        miter_limit: 2,
-        translate: {x4, y1}
-      )
-      |> text("quad", fill: :white, translate: {x4, y1 + label_offset})
-      |> arc({70, 1.6}, stroke: {6, :white}, translate: {x1 + 100, y3 + 60})
-      |> text("arc", fill: :white, translate: {x1, y3 + label_offset})
-      |> sector({70, 1.2}, fill: :teal, stroke: {3, :white}, translate: {x2 + 100, y3 + 60})
-      |> text("sector", fill: :white, translate: {x2, y3 + label_offset})
-      |> script("clip_path_demo", translate: {x2, y3 + 140})
-      |> text("clip path", fill: :white, translate: {x2, y3 + 230})
-      |> path(path_commands,
-        fill: :maroon,
-        stroke: {3, :white},
-        translate: {x4, y3}
-      )
-      |> text("path", fill: :white, translate: {x4, y3 + label_offset})
-      |> rect({200, 120},
-        fill: {:image, :stock},
-        translate: {x5, y3}
-      )
-      |> text("image", fill: :white, translate: {x5, y3 + label_offset})
-      |> line({{0, 0}, {200, 0}},
-        stroke: {12, {:image, :stock}},
-        translate: {x5, y3 + 150}
-      )
-      |> text("image stroke", fill: :white, translate: {x5, y3 + 180})
-      |> rect({200, 120},
-        fill: :red,
-        scissor: {120, 60},
-        translate: {x1, y4}
-      )
-      |> text("scissor", fill: :white, translate: {x1, y4 + label_offset})
-      |> line({{0, 0}, {200, 0}},
-        stroke: {12, {:linear, {0, 0, 200, 0, :red, :blue}}},
-        translate: {x1, y4 + 150}
-      )
-      |> text("linear stroke", fill: :white, translate: {x1, y4 + 180})
-      |> rect({200, 120},
-        fill: {:color_rgba, {255, 0, 0, 128}},
-        translate: {x3, y4}
-      )
-      |> text("alpha 0.5", fill: :white, translate: {x3, y4 + label_offset})
-      |> rect({200, 80},
-        fill: {:linear, {0, 0, 200, 0, :red, :blue}},
-        translate: {x3, y4 + 150}
-      )
-      |> text("linear gradient", fill: :white, translate: {x3, y4 + 240})
-      |> rect({200, 120},
-        fill: {:stream, "demo_stream"},
-        translate: {x5, y4}
-      )
-      |> text("stream", fill: :white, translate: {x5, y4 + label_offset})
-      |> line({{0, 0}, {200, 0}},
-        stroke: {12, {:stream, "demo_stream"}},
-        translate: {x5, y4 + 150}
-      )
-      |> text("stream stroke", fill: :white, translate: {x5, y4 + 180})
-      |> path(
-        [
-          :begin,
-          {:move_to, 0, 160},
-          {:line_to, 100, 0},
-          {:line_to, 200, 160}
-        ],
-        stroke: {24, :white},
-        join: :miter,
-        miter_limit: join_miter_limit,
-        translate: {x2, y4}
-      )
-      |> line({{0, 160}, {100, 0}}, stroke: {2, :red}, translate: {x2, y4})
-      |> line({{100, 0}, {200, 160}}, stroke: {2, :blue}, translate: {x2, y4})
-      |> text("join: miter (limit #{join_miter_limit})",
-        fill: :white,
-        translate: {x2, y4 + 120}
-      )
-      |> path(
-        [
-          :begin,
-          {:move_to, 0, 80},
-          {:line_to, 100, 0},
-          {:line_to, 200, 80}
-        ],
-        stroke: {10, :white},
-        join: :bevel,
-        translate: {x4, y4}
-      )
-      |> text("join: bevel", fill: :white, translate: {x4, y4 + 100})
-      |> path(
-        [
-          :begin,
-          {:move_to, 0, 80},
-          {:line_to, 100, 0},
-          {:line_to, 200, 80}
-        ],
-        stroke: {10, :white},
-        join: :round,
-        translate: {x4, y4 + 140}
-      )
-      |> text("join: round", fill: :white, translate: {x4, y4 + 240})
-      |> text("text", fill: :yellow, font_size: 30, translate: {x3, y3 + 70})
-      |> text("text", fill: :white, translate: {x3, y3 + label_offset})
     end
 
     defp schedule_join_tick(scene) do
@@ -211,7 +238,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> Script.fill_color(:navy)
       |> Script.stroke_color(:white)
       |> Script.stroke_width(3)
-      #|> Script.draw_variable_rounded_rectangle(200, 120, 36, 18, 54, 9, :fill_stroke)
+      # |> Script.draw_variable_rounded_rectangle(200, 120, 36, 18, 54, 9, :fill_stroke)
       |> Script.finish()
     end
 
@@ -287,7 +314,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> Script.push_state()
       |> Script.translate(170, 65)
       |> Script.begin_path()
-      #|> Script.arc(0, 0, 18, 0.0, 1.8, 1)
+      # |> Script.arc(0, 0, 18, 0.0, 1.8, 1)
       |> Script.stroke_path()
       |> Script.pop_state()
       |> Script.finish()
