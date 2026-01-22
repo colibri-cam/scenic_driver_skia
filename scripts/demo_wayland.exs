@@ -238,7 +238,7 @@ defmodule ScenicDriverSkia.DemoWayland do
       |> Script.fill_color(:navy)
       |> Script.stroke_color(:white)
       |> Script.stroke_width(3)
-      # |> Script.draw_variable_rounded_rectangle(200, 120, 36, 18, 54, 9, :fill_stroke)
+      |> Script.draw_variable_rounded_rectangle(200, 120, 36, 18, 54, 9, :fill_stroke)
       |> Script.finish()
     end
 
