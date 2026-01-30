@@ -67,6 +67,25 @@ The driver can target different rendering backends:
 - Elixir 1.15+ and a Rust toolchain (for Rustler).
 - Scenic and Scenic Clock checked out locally (see `mix.exs`).
 - System libraries required by the Skia backend for your platform.
+- **ninja** build tool - required if pre-built Skia binaries are unavailable for your platform.
+
+### Installing ninja
+
+If the first build fails with `failed to run 'ninja', does it exist in PATH?`, install ninja:
+
+```bash
+# Arch Linux
+sudo pacman -S ninja
+
+# Debian/Ubuntu
+sudo apt install ninja-build
+
+# Fedora
+sudo dnf install ninja-build
+
+# macOS
+brew install ninja
+```
 
 ## Documentation
 
