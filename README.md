@@ -1,6 +1,8 @@
-# Scenic.Driver.Skia
+# NOTE: not activly developed anymore
 
-WIP: This driver is under development and is not production-ready.
+This project was a stepping stone on creation of [Emerge](https://github.com/emerge-elixir/emerge) and is not activley maintend anymore. 
+
+# Scenic.Driver.Skia
 
 Disclaimer: Most of the code in this repository is AI generated.
 
